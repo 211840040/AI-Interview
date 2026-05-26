@@ -11,8 +11,8 @@ services:
   #   - 向量数据库是 LLM 应用开发中的核心基础设施。
   # =========================================
   postgres:
-    # 使用带有 pgvector 插件的 PostgreSQL 16 镜像
-    image: pgvector/pgvector:pg16
+    # 使用带有 pgvector 插件的 PostgreSQL 16 镜像（用17吧）
+    image: pgvector/pgvector:pg17
     container_name: interview-postgres
     environment:
       POSTGRES_USER: postgres
@@ -20,7 +20,7 @@ services:
       POSTGRES_DB: interview_guide
     volumes:
       # 数据持久化：确保容器重启或删除后，数据库数据不丢失
-      - postgres_data:/var/lib/postgresql/data
+      - D:/PostgreSQL/data:/var/lib/postgresql/data
       # 初始化脚本：容器首次启动时会自动执行 /docker-entrypoint-initdb.d/ 下的 .sql 文件
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
@@ -50,7 +50,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - D:/Redis/redis/data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -69,24 +69,24 @@ services:
   #     - 9000: API 端口，代码通过此端口上传/下载文件
   #     - 9001: 控制台端口，浏览器访问此端口管理文件
   # =========================================
-  minio:
-    image: minio/minio
-    container_name: interview-minio
-    # 启动命令：指定数据目录和控制台地址
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+  # minio:
+  #   image: minio/minio
+  #   container_name: interview-minio
+  #   # 启动命令：指定数据目录和控制台地址
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - minio_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 5
 
   # =========================================
   # 4. MinIO 初始化任务 (Init Container Pattern)
@@ -99,21 +99,97 @@ services:
   #   - "初始化容器"模式：这是一个短生命周期的容器，任务完成后自动退出。
   #   - 解决了"谁来创建 Bucket"的问题，实现了基础设施的自动化配置，无需手动操作。
   # =========================================
-  createbuckets:
-    image: minio/mc
-    depends_on:
-      minio:
-        condition: service_healthy # 必须等待 MinIO 服务健康（不仅仅是启动）
-    entrypoint: >
-      /bin/sh -c "
-      # 1. 配置 MinIO 客户端别名 (myminio) 连接到 minio 服务
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
-      # 2. 创建名为 interview-guide 的存储桶
-      /usr/bin/mc mb myminio/interview-guide;
-      # 3. 设置该存储桶为公共读权限（方便前端直接访问图片等资源）
-      /usr/bin/mc anonymous set public myminio/interview-guide;
-      exit 0;
-      "
+  # createbuckets:
+  #   image: minio/mc
+  #   depends_on:
+  #     minio:
+  #       condition: service_healthy # 必须等待 MinIO 服务健康（不仅仅是启动）
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #     # 1. 配置 MinIO 客户端别名 (myminio) 连接到 minio 服务
+  #     /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+  #     # 2. 创建名为 interview-guide 的存储桶
+  #     /usr/bin/mc mb myminio/interview-guide;
+  #     # 3. 设置该存储桶为公共读权限（方便前端直接访问图片等资源）
+  #     /usr/bin/mc anonymous set public myminio/interview-guide;
+  #     exit 0;
+  #     "
+
+  # =========================================
+  # 3. RustFS 对象存储服务
+  # -----------------------------------------
+  # 作用：
+  #   - 存储非结构化数据：用户上传的简历(PDF/Word)、头像、知识库文档等
+  #
+  # 教程知识点：
+  #   - RustFS 兼容 AWS S3 协议，代码中使用 S3 SDK 即可无缝切换
+  #   - 端口说明：
+  #     - 9000: API 端口，代码通过此端口上传/下载文件
+  #     - 9001: 控制台端口，浏览器访问此端口管理文件
+  # =========================================
+  # 首次启动后，浏览器访问 http://localhost:9001
+  # 使用 ${RUSTFS_ACCESS_KEY} / ${RUSTFS_SECRET_KEY} 登录，手动创建名为 interview-guide 的 bucket
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: interview-rustfs
+    # 启动命令：指定数据目录，启用控制台
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - D:/Rustfs/rustfs/data:/data # 使用 Docker 卷管理，便于跨平台
+      # 或者使用绝对路径（Windows 示例）：
+      # - D:/Rustfs/rustfs/data:/data
+    # healthcheck:
+    #   test:
+    #     [
+    #       "CMD-SHELL",
+    #       "timeout 3 sh -c 'cat < /dev/null > /dev/tcp/localhost/9000' || exit 1",
+    #     ]
+    #   interval: 5s
+    #   timeout: 3s
+    #   retries: 5
+
+  # =========================================
+  # 4. RustFS 初始化任务 (Init Container Pattern)
+  # -----------------------------------------
+  # 作用：
+  #   - 自动创建项目所需的存储桶 (Bucket)
+  #   - 设置存储桶的访问策略
+  #
+  #   - "初始化容器"模式：短生命周期容器，任务完成后自动退出
+  #   - RustFS 兼容 AWS S3，可以使用 AWS CLI 或 mc 客户端
+  #   - 使用 mc (MinIO Client) 管理 RustFS（兼容 S3）
+  # =========================================
+  # createbuckets:
+  #   image: minio/mc # mc 客户端可以管理任何 S3 兼容服务
+  #   depends_on:
+  #     rustfs:
+  #       condition: service_started
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #     echo '等待 RustFS 服务就绪...';
+  #     sleep 5;
+  #     # 1. 配置 mc 客户端别名，连接到 RustFS 服务
+  #     /usr/bin/mc alias set myrustfs http://rustfs:9000 ${RUSTFS_ACCESS_KEY:-rustfsadmin} ${RUSTFS_SECRET_KEY:-rustfsadmin};
+  #     # 2. 检查 bucket 是否已存在，不存在则创建
+  #     if /usr/bin/mc ls myrustfs | grep -q 'interview-guide'; then
+  #       echo 'Bucket interview-guide 已存在，跳过创建';
+  #     else
+  #       echo '创建 bucket: interview-guide';
+  #       /usr/bin/mc mb myrustfs/interview-guide;
+  #     fi;
+  #     # 3. 设置 bucket 为公共读（可选，根据需求调整）
+  #     echo '设置 bucket 访问策略为 public';
+  #     /usr/bin/mc anonymous set public myrustfs/interview-guide;
+  #     echo 'RustFS 初始化完成';
+  #     exit 0;
+  #     "
 
   # =========================================
   # 5. 后端应用服务 (Spring Boot)
@@ -133,10 +209,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
-      createbuckets:
-        condition: service_completed_successfully # 等待初始化任务完成
+      # rustfs:
+      #   condition: service_healthy
+      rustfs:
+        condition: service_started
+      # createbuckets:
+      #   condition: service_completed_successfully # 等待初始化任务完成
     environment:
       # === 数据库连接 ===
       # 使用服务名 'postgres' 作为主机名，Docker 内部 DNS 会自动解析
@@ -145,23 +223,23 @@ services:
       POSTGRES_DB: interview_guide
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      
+
       # === Redis 连接 ===
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      
+
       # === 对象存储配置 ===
       # 注意：后端在容器内访问 MinIO，使用 http://minio:9000
-      APP_STORAGE_ENDPOINT: http://minio:9000
-      APP_STORAGE_ACCESS_KEY: minioadmin
-      APP_STORAGE_SECRET_KEY: minioadmin
+      APP_STORAGE_ENDPOINT: http://rustfs:9000
+      APP_STORAGE_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      APP_STORAGE_SECRET_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       APP_STORAGE_BUCKET: interview-guide
       APP_STORAGE_REGION: us-east-1
-      
+
       # === AI 模型配置 (必须配置) ===
       # 这里的变量值来自宿主机的环境变量或 .env 文件
       AI_BAILIAN_API_KEY: ${AI_BAILIAN_API_KEY}
-      AI_MODEL: ${AI_MODEL:-qwen3.5-flash}
+      AI_MODEL: ${AI_MODEL:-qwen3.6-flash}
 
       # === 面试参数配置 ===
       APP_INTERVIEW_FOLLOW_UP_COUNT: ${APP_INTERVIEW_FOLLOW_UP_COUNT:-1}
