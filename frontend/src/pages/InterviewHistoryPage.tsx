@@ -3,7 +3,7 @@ import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
 import {historyApi} from '../api/history';
 import {interviewApi, type TextSessionMeta} from '../api/interview';
-import {voiceInterviewApi, SessionMeta} from '../api/voiceInterview';
+import {voiceInterviewApi, type SessionMeta} from '../api/voiceInterview';
 import {formatDate} from '../utils/date';
 import {getScoreProgressColor} from '../utils/score';
 import {skillApi, type SkillDTO} from '../api/skill';
@@ -33,7 +33,7 @@ interface UnifiedInterviewItem {
   id: string;
   type: 'text' | 'voice';
   title: string;
-  sessionId: string;
+  sessionId: string | number;
   status: string;
   evaluateStatus?: string;
   evaluateError?: string;
@@ -42,7 +42,7 @@ interface UnifiedInterviewItem {
   actualDuration?: number;
   createdAt: string;
   resumeId?: number;
-  voiceSessionId?: number;
+  voiceSessionId?: number | string;
 }
 
 interface InterviewStats {
@@ -61,7 +61,7 @@ function isLiveStatus(status: string): boolean {
 
 function isEvaluateCompleted(item: UnifiedInterviewItem): boolean {
   if (item.evaluateStatus === 'COMPLETED') return true;
-  if (item.status === 'EVALUATED') return true;
+  if (item.evaluateStatus === null && item.status === 'EVALUATED') return true;
   return false;
 }
 
@@ -180,6 +180,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
   const pollingRef = useRef<number | null>(null);
   const skillsRef = useRef<SkillDTO[]>([]);
   const skillsLoadedRef = useRef(false);
+  const voiceSessionIdsRef = useRef<Set<number>>(new Set());
 
   const loadAll = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
@@ -191,10 +192,69 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         skillsLoadedRef.current = true;
       }
       const loadedSkills = skillsRef.current;
-      const [textInterviews, voiceSessions] = await Promise.all([
-        loadTextInterviews(loadedSkills),
-        loadVoiceInterviews(),
-      ]);
+
+      // 获取文字面试
+      const textInterviews = await loadTextInterviews(loadedSkills);
+
+      // 获取语音面试列表
+      const voiceSessionsList = await voiceInterviewApi.getAllSessions().catch(() => [] as SessionMeta[]);
+
+      // 更新语音面试会话ID缓存
+      voiceSessionIdsRef.current = new Set(voiceSessionsList.map((s: SessionMeta) => s.sessionId));
+
+      // 并发获取所有已完成的语音面试评估详情
+      const voiceSessions = await Promise.all(
+        voiceSessionsList.map(async (session) => {
+          if (session.evaluateStatus === 'COMPLETED' && voiceSessionIdsRef.current.has(session.sessionId)) {
+            try {
+              const response = await voiceInterviewApi.getEvaluation(Number(session.sessionId)).catch(() => null);
+              return {
+                id: `voice-${session.sessionId}`,
+                type: 'voice' as const,
+                title: session.roleType,
+                sessionId: String(session.sessionId),
+                status: session.status,
+                evaluateStatus: session.evaluateStatus,
+                evaluateError: session.evaluateError,
+                overallScore: response?.evaluation?.overallScore || null,
+                actualDuration: session.actualDuration,
+                createdAt: session.createdAt,
+                voiceSessionId: session.sessionId,
+              };
+            } catch {
+              // 评估接口失败，使用基础数据
+              return {
+                id: `voice-${session.sessionId}`,
+                type: 'voice' as const,
+                title: session.roleType,
+                sessionId: String(session.sessionId),
+                status: session.status,
+                evaluateStatus: session.evaluateStatus,
+                evaluateError: session.evaluateError,
+                overallScore: null,
+                actualDuration: session.actualDuration,
+                createdAt: session.createdAt,
+                voiceSessionId: session.sessionId,
+              };
+            }
+          } else {
+            // 评估未完成或会话不在缓存中，使用基础数据
+            return {
+              id: `voice-${session.sessionId}`,
+              type: 'voice' as const,
+              title: session.roleType,
+              sessionId: String(session.sessionId),
+              status: session.status,
+              evaluateStatus: session.evaluateStatus,
+              evaluateError: session.evaluateError,
+              overallScore: null,
+              actualDuration: session.actualDuration,
+              createdAt: session.createdAt,
+              voiceSessionId: session.sessionId,
+            };
+          }
+        })
+      );
 
       const voiceWithNames = voiceSessions.map(item => {
         const skillName = getTemplateName(item.title, loadedSkills);
@@ -253,28 +313,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     }
   }
 
-  // Load voice interviews from voice API
-  async function loadVoiceInterviews(): Promise<UnifiedInterviewItem[]> {
-    try {
-      const sessions = await voiceInterviewApi.getAllSessions();
-      return sessions.map((session: SessionMeta) => ({
-        id: `voice-${session.sessionId}`,
-        type: 'voice' as const,
-        title: session.roleType,
-        sessionId: String(session.sessionId),
-        status: session.status,
-        evaluateStatus: session.evaluateStatus,
-        evaluateError: session.evaluateError,
-        overallScore: null,
-        actualDuration: session.actualDuration,
-        createdAt: session.createdAt,
-        voiceSessionId: session.sessionId,
-      }));
-    } catch {
-      return [];
-    }
-  }
-
   useEffect(() => {
     loadAll();
   }, [loadAll]);
@@ -300,13 +338,13 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
 
   const handleRowClick = (item: UnifiedInterviewItem) => {
     if (item.type === 'text') {
-      onViewInterview(item.sessionId, item.resumeId);
+      onViewInterview(String(item.sessionId), item.resumeId);
     } else if (item.voiceSessionId) {
       const isLive = isLiveStatus(item.status);
       if (isLive) {
-        navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } });
+        navigate('/voice-interview', { state: { voiceSessionId: Number(item.voiceSessionId) } });
       } else {
-        navigate(`/voice-interview/${item.voiceSessionId}/evaluation`);
+        navigate(`/voice-interview/${Number(item.voiceSessionId)}/evaluation`);
       }
     }
   };
@@ -318,12 +356,12 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
 
   const handleDeleteConfirm = async () => {
     if (!deleteItem) return;
-    setDeletingSessionId(deleteItem.sessionId);
+    setDeletingSessionId(String(deleteItem.sessionId));
     try {
       if (deleteItem.type === 'voice' && deleteItem.voiceSessionId) {
-        await voiceInterviewApi.deleteSession(deleteItem.voiceSessionId);
+        await voiceInterviewApi.deleteSession(Number(deleteItem.voiceSessionId));
       } else {
-        await historyApi.deleteInterview(deleteItem.sessionId);
+        await historyApi.deleteInterview(String(deleteItem.sessionId));
       }
       await loadAll();
       setDeleteItem(null);
@@ -544,7 +582,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                       <div className="flex items-center justify-end gap-1">
                         {item.type === 'text' && !isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); onContinueInterview(item.sessionId); }}
+                            onClick={(e) => { e.stopPropagation(); onContinueInterview(String(item.sessionId)); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="继续面试"
                           >
@@ -553,7 +591,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                         )}
                         {item.type === 'voice' && isLiveStatus(item.status) && item.voiceSessionId && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } }); }}
+                            onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: Number(item.voiceSessionId) } }); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="继续面试"
                           >
@@ -562,7 +600,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                         )}
                         {isEvaluateCompleted(item) && item.type === 'text' && (
                           <button
-                            onClick={(e) => handleExport(item.sessionId, e)}
+                            onClick={(e) => handleExport(String(item.sessionId), e)}
                             disabled={exporting === item.sessionId}
                             className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50"
                             title="导出PDF"

@@ -42,7 +42,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create #首次启动用 create，表创建成功后，改回 update
+      ddl-auto: update # 初始创建后改回 update，避免重启时清空数据
     show-sql: false
     properties:
       hibernate:

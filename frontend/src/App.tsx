@@ -5,7 +5,6 @@ import { historyApi, type InterviewDetail } from './api/history';
 import type { Difficulty } from './components/UnifiedInterviewModal';
 import type { CategoryDTO } from './api/skill';
 import { Loader2 } from 'lucide-react';
-import { ROUTES } from './constants/routes';
 
 // Lazy load components
 const UploadPage = lazy(() => import('./pages/UploadPage'));
