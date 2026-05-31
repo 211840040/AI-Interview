@@ -52,7 +52,7 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 50MB # 支持知识库上传（简历限制在业务层检查）
+      max-file-size: 50MB # 简历上传大小限制（业务层校验类型）
       max-request-size: 50MB
     encoding:
       charset: UTF-8
@@ -156,16 +156,6 @@ app:
     structured-error-message-max-length: ${APP_AI_STRUCTURED_ERROR_MESSAGE_MAX_LENGTH:200}
     # 是否开启结构化输出调用指标（invocations/attempts/latency）
     structured-metrics-enabled: ${APP_AI_STRUCTURED_METRICS_ENABLED:true}
-    rag:
-      rewrite:
-        enabled: ${APP_AI_RAG_REWRITE_ENABLED:true}
-      search:
-        short-query-length: ${APP_AI_RAG_SHORT_QUERY_LENGTH:4}
-        topk-short: ${APP_AI_RAG_TOPK_SHORT:20}
-        topk-medium: ${APP_AI_RAG_TOPK_MEDIUM:12}
-        topk-long: ${APP_AI_RAG_TOPK_LONG:8}
-        min-score-short: ${APP_AI_RAG_MIN_SCORE_SHORT:0.18}
-        min-score-default: ${APP_AI_RAG_MIN_SCORE_DEFAULT:0.28}
   interview:
     follow-up-count: ${APP_INTERVIEW_FOLLOW_UP_COUNT:1}
     evaluation:

@@ -99,30 +99,11 @@ public class FileValidationService {
         if (fileName == null) {
             return false;
         }
-        
+
         String lowerFileName = fileName.toLowerCase();
         return lowerFileName.endsWith(".md") ||
                lowerFileName.endsWith(".markdown") ||
                lowerFileName.endsWith(".mdown");
-    }
-    
-    /**
-     * 检查MIME类型是否为知识库支持的格式
-     */
-    public boolean isKnowledgeBaseMimeType(String contentType) {
-        if (contentType == null) {
-            return false;
-        }
-        
-        String lowerContentType = contentType.toLowerCase();
-        return lowerContentType.contains("pdf") ||
-               lowerContentType.contains("msword") ||
-               lowerContentType.contains("wordprocessingml") ||
-               lowerContentType.contains("text/plain") ||
-               lowerContentType.contains("text/markdown") ||
-               lowerContentType.contains("text/x-markdown") ||
-               lowerContentType.contains("text/x-web-markdown") ||
-               lowerContentType.contains("application/rtf");
     }
 }
 

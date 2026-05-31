@@ -1,6 +1,6 @@
 <div align="center">
 
-**智能 AI 面试官平台** - 基于大语言模型的简历分析、模拟面试和 RAG 知识库系统
+**智能 AI 面试官平台** - 基于大语言模型的简历分析与模拟面试平台
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-green?logo=springboot)](https://spring.io/projects/spring-boot)
@@ -16,7 +16,7 @@
 
 ## 项目介绍
 
-InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音）、面试安排、知识库管理和多模型配置的智能面试辅助平台。系统利用大语言模型（LLM）、向量数据库、Redis Stream 异步任务和实时语音技术，为求职者、HR 和培训机构提供智能化的简历评估、面试练习、知识库问答和面试日程管理能力。
+InterviewGuide 是一个集成了简历分析与模拟面试（文字 + 语音）的智能面试辅助平台。系统利用大语言模型（LLM）、Redis Stream 异步任务和实时语音技术，为求职者、HR 和培训机构提供智能化的简历评估与面试练习能力。
 
 ## 系统架构
 
@@ -56,7 +56,7 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 1. 数据存储为什么选择 PostgreSQL + pgvector？PG 的向量数据存储功能够用了，精简架构，不想引入太多组件。
 2. 为什么引入 Redis？
    - Redis 替代 `ConcurrentHashMap` 实现面试会话的缓存。
-   - 基于 Redis Stream 实现简历分析、知识库向量化等场景的异步（还能解耦，分析和向量化可以使用其他编程语言来做）。不使用 [Kafka](https://javaguide.cn/high-performance/message-queue/kafka-questions-01.html) 这类成熟的消息队列，也是不想引入太多组件。
+   - 基于 Redis Stream 实现简历分析等场景的异步（还能解耦，分析可以使用其他编程语言来做）。不使用 [Kafka](https://javaguide.cn/high-performance/message-queue/kafka-questions-01.html) 这类成熟的消息队列，也是不想引入太多组件。
 3. 构建工具为什么选择 Gradle？个人更喜欢用 Gradle，也写过相关的文章：[Gradle核心概念总结](https://javaguide.cn/tools/gradle/gradle-core-concepts.html)。
 
 ### 前端技术
@@ -71,8 +71,6 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 | Framer Motion     | 12.23 | 动画库         |
 | Recharts          | 3.6   | 图表库         |
 | Lucide React      | 0.468 | 图标库         |
-| React Big Calendar| 1.19  | 面试日历组件   |
-| React Virtuoso    | 4.18  | RAG 聊天虚拟列表 |
 | pnpm              | 10.26 | 前端包管理器   |
 
 ## 功能特性
@@ -86,20 +84,13 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 
 ### 模拟面试模块
 
-- **Skill 驱动出题**：内置 10+ 面试方向（Java 后端、阿里/字节/腾讯专项、前端、Python、算法、系统设计、测开、AI Agent 等），每个方向由 `SKILL.md` 定义考察范围、难度分布和参考知识库。
+- **Skill 驱动出题**：内置 10+ 面试方向（Java 后端、阿里/字节/腾讯专项、前端、Python、算法、系统设计、测开、AI Agent 等），每个方向由 `SKILL.md` 定义考察范围。
 - **历史题目去重**：出题时自动排除已有会话中问过的题目，避免重复考察。
 - **面试阶段时长联动**：总时长滑块拖动后，各阶段（自我介绍、技术考察、项目深挖、反问环节）按时比自动分配。
 - **智能追问流**：支持配置多轮智能追问（默认 1 条），模拟多轮问答场景。
 - **统一评估架构**：文字面试和语音面试共用同一套评估引擎（分批评估 + 结构化输出 + 二次汇总 + 降级兜底），评估结果可对比。
 - **报告一键导出**：支持异步生成并导出详细的 PDF 模拟面试评估报告。
 - **面试中心入口**：面试中心页整合文字面试和语音面试入口，支持继续面试和重新面试。
-
-### 面试安排模块
-
-- **邀请解析**：规则 + AI 双引擎，支持飞书/腾讯会议/Zoom 格式，自动提取公司、岗位、时间、会议链接
-- **日历管理**：日/周/月视图 + 拖拽调整 + 列表视图
-- **状态流转**：定时任务自动过期，手动标记待面试/已完成/已取消
-- **面试提醒**：可配置提醒，避免错过面试
 
 ### 语音面试模块
 
@@ -113,42 +104,19 @@ InterviewGuide 是一个集成了简历分析、模拟面试（文字 + 语音�
 
 > **已知问题**：端到端延迟偏高（服务端音频中转）、无耳机时回声泄漏、TTS 音色单一、弱网音频断续。后续计划探索 WebRTC、客户端 VAD 降噪、端到端语音模型等方案。
 
-### 知识库管理模块
-
-- **文档智能处理**：支持 PDF、DOCX、Markdown 等多种格式文档的自动上传、分块与异步向量化。
-- **RAG 检索增强**：集成 pgvector，通过查询改写、相似度阈值和 TopK 策略提升 AI 问答的准确性与专业度。
-- **流式响应交互**：基于 SSE（Server-Sent Events）技术实现打字机式流式响应。
-- **智能问答对话**：支持会话管理、置顶、多知识库关联、Markdown 展示和虚拟列表渲染。
-- **知识库运维**：支持分类管理、下载、重新向量化、搜索和统计信息展示。
-
-### 多模型与系统设置模块
-
-- **多 Provider 管理**：内置 DashScope、LM Studio、Kimi、DeepSeek、GLM 等 OpenAI 兼容 Provider 配置。
-- **默认模型切换**：支持在设置页切换默认聊天模型和默认向量模型，不需要频繁修改源码配置。
-- **语音服务配置**：ASR/TTS 配置可视化管理，支持语音服务连通性测试。
-- **配置安全落盘**：运行时配置默认写入用户目录 `~/.interview-guide/`，支持 API Key 加密配置。
-
 ### TODO
 
-- [x] 问答助手的 Markdown 展示优化
-- [x] 知识库管理页面的知识库下载
 - [x] 异步生成模拟面试评估报告
 - [x] Docker 快速部署
 - [x] 添加 API 限流保护
-- [x] 前端性能优化（RAG 聊天 - 虚拟列表）
 - [x] 模拟面试增加追问功能
 - [x] 语音面试功能（基于 Qwen3 实时语音模型）
-- [x] 面试安排管理（智能解析 + 日历视图）
-- [x] Skill 驱动出题（10+ 面试方向 + 参考知识库）
-- [x] 统一面试评估架构（文字/语音共用评估引擎）
 - [x] 面试历史题目去重
 - [x] 面试中心页（整合文字/语音入口）
 - [x] 语音面试 LLM 流式输出 + 句子级并发 TTS
 - [x] 语音面试暂停/恢复 + 手动提交 + 回声防护
-- [x] 多 LLM Provider 管理与默认模型切换
-- [x] RAG 聊天会话管理 + 虚拟列表优化
-- [x] 可重复注解 API 限流（Global/IP/User 维度）
-- [ ] 打通模拟面试和知识库
+- [x] Skill 驱动出题（10+ 面试方向）
+- [x] 统一面试评估架构（文字/语音共用评估引擎）
 - [ ] 语音面试接入 WebRTC 降低延迟
 - [ ] 语音面试支持更多 TTS 音色
 
@@ -189,25 +157,6 @@ Skill 出题 + JD 解析：
 
 ![模拟面试](https://oss.javaguide.cn/xingqiu/pratical-project/interview-guide/page-mock-interview.png)
 
-面试安排
-
-![面试安排](https://oss.javaguide.cn/xingqiu/pratical-project/interview-guide/page-interview-schedule-list.png)
-
-多模型切换 + 语音服务设置：
-
-![管理聊天模型、向量模型和模块配置](https://oss.javaguide.cn/xingqiu/pratical-project/interview-guide/llm-settings.png)
-
-
-### 知识库
-
-知识库管理：
-
-![知识库管理](https://oss.javaguide.cn/xingqiu/pratical-project/interview-guide/page-knowledge-base-management.png)
-
-问答助手：
-
-![问答助手](https://oss.javaguide.cn/xingqiu/pratical-project/interview-guide/page-qa-assistant.png)
-
 ## 项目结构
 
 ```
@@ -231,8 +180,6 @@ interview-guide/
 │   │   │   └── redis/                # RedisService、面试会话缓存
 │   │   └── modules/                  # 业务模块
 │   │       ├── interview/            # 模拟面试模块
-│   │       ├── interviewschedule/    # 面试安排模块
-│   │       ├── knowledgebase/        # 知识库模块
 │   │       ├── llmprovider/          # 多模型 Provider 与语音配置
 │   │       ├── resume/               # 简历模块
 │   │       └── voiceinterview/       # 语音面试模块
@@ -377,7 +324,7 @@ cp .env.example .env
 # vim .env
 # 必填：AI_BAILIAN_API_KEY=your_key_here
 # 可选：AI_MODEL=qwen3.5-flash   # 默认值为 qwen3.5-flash
-# 也可以在设置页维护 DashScope、Kimi、DeepSeek、GLM、LM Studio 等 Provider
+# 也可以在后端维护 DashScope、Kimi、DeepSeek、GLM、LM Studio 等 Provider
 #
 # 面试参数配置（可选）：
 # APP_INTERVIEW_FOLLOW_UP_COUNT=1         # 每个主问题生成追问数量（默认 1）
@@ -432,7 +379,7 @@ docker image prune -f
 | --------------- | -------------------------------------- |
 | **求职者**      | 上传简历获取分析建议，进行模拟面试练习 |
 | **HR/招聘人员** | 批量分析简历，评估候选人能力           |
-| **培训机构**    | 提供面试培训服务，管理知识库资源       |
+| **培训机构**    | 提供面试培训服务，管理面试练习资源   |
 
 ## 常见问题
 
@@ -478,11 +425,11 @@ spring:
 
 ### Q: 设置页新增/切换模型后不生效？
 
-运行时 Provider 配置默认写到 `~/.interview-guide/llm-providers.yml` 和 `~/.interview-guide/llm-providers.env`。可以在设置页点击测试连接，或调用 `/api/llm-provider/reload` 重新加载配置。Docker 部署时如果希望配置持久化，建议为该目录挂载卷。
+运行时 Provider 配置默认写到 `~/.interview-guide/llm-providers.yml` 和 `~/.interview-guide/llm-providers.env`。如需重新加载，可调用 `/api/llm-provider/reload` 触发配置刷新。Docker 部署时如果希望配置持久化，建议为该目录挂载卷。
 
 ### Q: 语音面试无法识别或没有声音？
 
-语音面试的 ASR/TTS 默认也使用 `AI_BAILIAN_API_KEY`。请检查浏览器麦克风权限、后端日志中的 DashScope WebSocket 连接状态，以及设置页里的 ASR/TTS 测试结果。无耳机时可能触发回声录入，建议先使用手动提交模式或佩戴耳机测试。
+语音面试的 ASR/TTS 默认也使用 `AI_BAILIAN_API_KEY`。请检查浏览器麦克风权限、后端日志中的 DashScope WebSocket 连接状态。无耳机时可能触发回声录入，建议先使用手动提交模式或佩戴耳机测试。
 
 ### Q: 简历分析一直显示"分析中"？
 
