@@ -21,8 +21,18 @@ public record InterviewDetailDTO(
     List<String> strengths,
     List<String> improvements,
     List<Object> referenceAnswers,
-    List<AnswerDetailDTO> answers
+    List<AnswerDetailDTO> answers,
+    List<EvaluationScoreDTO> evidenceScores
 ) {
+    public record EvaluationScoreDTO(
+        String dimension,
+        Integer score,
+        String anchorLabel,
+        String rationale,
+        java.util.List<java.util.Map<String, String>> evidence,
+        java.util.List<java.util.Map<String, String>> actionItems,
+        String createdAt
+    ) {}
     /**
      * 答案详情DTO
      */

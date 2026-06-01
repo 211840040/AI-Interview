@@ -32,6 +32,20 @@ public class EvaluateStreamProducer extends AbstractStreamProducer<String> {
      */
     public void sendEvaluateTask(String sessionId) {
         sendTask(sessionId);
+        sendMultipoleTask(sessionId);
+    }
+
+    private void sendMultipoleTask(String sessionId) {
+        Map<String, String> message = Map.of(
+            AsyncTaskStreamConstants.FIELD_SESSION_ID, sessionId,
+            AsyncTaskStreamConstants.FIELD_RETRY_COUNT, "0"
+        );
+        redisService().streamAdd(
+            AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY,
+            message,
+            AsyncTaskStreamConstants.STREAM_MAX_LEN
+        );
+        log.info("多维度评估任务已入队: sessionId={}", sessionId);
     }
 
     @Override

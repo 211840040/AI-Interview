@@ -88,7 +88,22 @@ public final class AsyncTaskStreamConstants {
      */
     public static final String FIELD_SESSION_ID = "sessionId";
 
-    // ========== 语音面试评估 Stream 配置 ==========
+    // ========== 面试多维度评估 Stream 配置 ==========
+
+    /**
+     * 面试多维度评估 Stream Key
+     */
+    public static final String INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY = "interview:evaluate:multipole:stream";
+
+    /**
+     * 面试多维度评估 Consumer Group 名称
+     */
+    public static final String INTERVIEW_EVALUATE_MULTIPOLE_GROUP_NAME = "evaluate-multipole-group";
+
+    /**
+     * 面试多维度评估 Consumer 名称前缀
+     */
+    public static final String INTERVIEW_EVALUATE_MULTIPOLE_CONSUMER_PREFIX = "evaluate-multipole-consumer-";
 
     /**
      * 语音面试评估 Stream Key
