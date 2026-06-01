@@ -124,4 +124,21 @@ public final class AsyncTaskStreamConstants {
      * 语音面试会话ID字段
      */
     public static final String FIELD_VOICE_SESSION_ID = "voiceSessionId";
+
+    // ========== 语音面试多维度评估 Stream 配置 ==========
+
+    /**
+     * 语音面试多维度评估 Stream Key
+     */
+    public static final String VOICE_EVALUATE_MULTIPOLE_STREAM_KEY = "voice:evaluate:multipole:stream";
+
+    /**
+     * 语音面试多维度评估 Consumer Group 名称
+     */
+    public static final String VOICE_EVALUATE_MULTIPOLE_GROUP_NAME = "voice-evaluate-multipole-group";
+
+    /**
+     * 语音面试多维度评估 Consumer 名称前缀
+     */
+    public static final String VOICE_EVALUATE_MULTIPOLE_CONSUMER_PREFIX = "voice-evaluate-multipole-consumer-";
 }

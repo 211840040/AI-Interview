@@ -11,6 +11,7 @@ import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
 import interview.guide.modules.voiceinterview.dto.SessionMetaDTO;
 import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
 import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
+import interview.guide.modules.voiceinterview.listener.VoiceMultipoleEvaluateStreamProducer;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionStatus;
@@ -51,6 +52,7 @@ public class VoiceInterviewService {
     private final RedissonClient redissonClient;
     private final VoiceInterviewProperties properties;
     private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
+    private final VoiceMultipoleEvaluateStreamProducer voiceMultipoleEvaluateStreamProducer;
     private final LlmProviderRegistry llmProviderRegistry;
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
@@ -129,6 +131,7 @@ public class VoiceInterviewService {
 
         endSession(session);
         voiceEvaluateStreamProducer.sendEvaluateTask(sessionId);
+        voiceMultipoleEvaluateStreamProducer.sendMultipoleTask(sessionId);
     }
 
     private void endSession(VoiceInterviewSessionEntity session) {
@@ -582,6 +585,7 @@ public class VoiceInterviewService {
     public void triggerEvaluation(Long sessionId) {
         updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);
         voiceEvaluateStreamProducer.sendEvaluateTask(sessionId.toString());
+        voiceMultipoleEvaluateStreamProducer.sendMultipoleTask(sessionId.toString());
     }
 
     /**

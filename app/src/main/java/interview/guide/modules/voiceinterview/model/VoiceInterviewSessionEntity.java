@@ -103,6 +103,13 @@ public class VoiceInterviewSessionEntity {
     @Column(name = "evaluate_error", length = 500)
     private String evaluateError;
 
+    @Column(name = "multipole_evaluate_status")
+    @Enumerated(EnumType.STRING)
+    private AsyncTaskStatus multipoleEvaluateStatus;
+
+    @Column(name = "multipole_evaluate_error", length = 500)
+    private String multipoleEvaluateError;
+
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();

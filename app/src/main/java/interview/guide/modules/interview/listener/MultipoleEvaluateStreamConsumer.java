@@ -28,7 +28,8 @@ import java.util.Optional;
  */
 @Slf4j
 @Component
-public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<MultipoleEvaluateStreamConsumer.EvaluatePayload> {
+public class MultipoleEvaluateStreamConsumer
+        extends AbstractStreamConsumer<MultipoleEvaluateStreamConsumer.EvaluatePayload> {
 
     private final InterviewSessionRepository sessionRepository;
     private final InterviewEvaluationService interviewEvaluationService;
@@ -37,13 +38,12 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
     private final LlmProviderRegistry llmProviderRegistry;
 
     public MultipoleEvaluateStreamConsumer(
-        RedisService redisService,
-        InterviewSessionRepository sessionRepository,
-        InterviewEvaluationService interviewEvaluationService,
-        InterviewPersistenceService persistenceService,
-        ObjectMapper objectMapper,
-        LlmProviderRegistry llmProviderRegistry
-    ) {
+            RedisService redisService,
+            InterviewSessionRepository sessionRepository,
+            InterviewEvaluationService interviewEvaluationService,
+            InterviewPersistenceService persistenceService,
+            ObjectMapper objectMapper,
+            LlmProviderRegistry llmProviderRegistry) {
         super(redisService);
         this.sessionRepository = sessionRepository;
         this.interviewEvaluationService = interviewEvaluationService;
@@ -52,7 +52,8 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
         this.llmProviderRegistry = llmProviderRegistry;
     }
 
-    record EvaluatePayload(String sessionId) {}
+    record EvaluatePayload(String sessionId) {
+    }
 
     @Override
     protected String taskDisplayName() {
@@ -110,9 +111,9 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
 
         InterviewSessionEntity session = sessionOpt.get();
         List<InterviewQuestionDTO> questions = objectMapper.readValue(
-            session.getQuestionsJson(),
-            new TypeReference<>() {}
-        );
+                session.getQuestionsJson(),
+                new TypeReference<>() {
+                });
 
         List<InterviewAnswerEntity> answers = persistenceService.findAnswersBySessionId(sessionId);
         for (InterviewAnswerEntity answer : answers) {
@@ -133,6 +134,7 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
     @Override
     protected void markCompleted(EvaluatePayload payload) {
         updateEvaluateStatus(payload.sessionId(), AsyncTaskStatus.COMPLETED, null);
+        persistenceService.checkAndMarkComplete(payload.sessionId());
     }
 
     @Override
@@ -145,15 +147,13 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
         String sessionId = payload.sessionId();
         try {
             Map<String, String> message = Map.of(
-                AsyncTaskStreamConstants.FIELD_SESSION_ID, sessionId,
-                AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
-            );
+                    AsyncTaskStreamConstants.FIELD_SESSION_ID, sessionId,
+                    AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount));
 
             redisService().streamAdd(
-                AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
+                    AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY,
+                    message,
+                    AsyncTaskStreamConstants.STREAM_MAX_LEN);
             log.info("多维度评估任务已重新入队: sessionId={}, retryCount={}", sessionId, retryCount);
 
         } catch (Exception e) {
@@ -165,7 +165,7 @@ public class MultipoleEvaluateStreamConsumer extends AbstractStreamConsumer<Mult
     private void updateEvaluateStatus(String sessionId, AsyncTaskStatus status, String error) {
         try {
             sessionRepository.findBySessionId(sessionId).ifPresent(session -> {
-                session.setEvaluateStatus(status);
+                session.setMultipoleEvaluateStatus(status);
                 session.setEvaluateError(error);
                 sessionRepository.save(session);
                 log.debug("多维度评估状态已更新: sessionId={}, status={}", sessionId, status);

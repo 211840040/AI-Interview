@@ -45,29 +45,6 @@ QA 记录格式：
 4. 计算综合评分（四个维度分数的平均值，向下取整）
 5. 输出严格的 JSON（不能添加其他描述性文字或额外的 markdown/code 块）
 
-# Output Format
-请严格输出下列 JSON 结构（不要添加任何额外文本或 markdown 代码块标记）：
-
-{
-  "overallScore": <整数 0-100>,
-  "dimensions": [
-    {
-      "name": "Communication",
-      "score": <0-100, 整数>,
-      "anchorLabel": "<Excellent|Good|Fair|Poor|Unintelligible>",
-      "rationale": "<必须引用问答原文片段>",
-      "evidence": [
-        {"text": "引用的原文片段"},
-        {"text": "引用的原文片段2"}
-      ],
-      "actionItems": [
-        {"title": "<建议标题>", "difficulty": "<easy|medium|hard>", "exercise": "<可执行练习>"}
-      ]
-    }
-    // 其他维度同样结构：Technical Knowledge、Problem Solving、Project Storytelling
-  ]
-}
-
 # Constraints
 - overallScore 必须是四个维度分数的算术平均并向下取整（整数）
 - rationale 必须引用至少 2 条问答原文片段，evidence 用原文片段数组表示

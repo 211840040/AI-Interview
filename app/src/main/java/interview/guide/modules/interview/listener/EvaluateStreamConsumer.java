@@ -136,6 +136,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
     @Override
     protected void markCompleted(EvaluatePayload payload) {
         updateEvaluateStatus(payload.sessionId(), AsyncTaskStatus.COMPLETED, null);
+        persistenceService.checkAndMarkComplete(payload.sessionId());
     }
 
     @Override

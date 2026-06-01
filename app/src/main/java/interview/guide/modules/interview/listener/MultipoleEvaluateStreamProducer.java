@@ -11,37 +11,36 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 /**
- * 面试评估任务生产者
- * 负责发送评估任务到 Redis Stream
+ * 面试多维度评估任务生产者
+ * 负责发送多维度评估任务到独立 Stream
  */
 @Slf4j
 @Component
-public class EvaluateStreamProducer extends AbstractStreamProducer<String> {
+public class MultipoleEvaluateStreamProducer extends AbstractStreamProducer<String> {
 
     private final InterviewSessionRepository sessionRepository;
 
-    public EvaluateStreamProducer(RedisService redisService, InterviewSessionRepository sessionRepository) {
+    public MultipoleEvaluateStreamProducer(RedisService redisService,
+                                          InterviewSessionRepository sessionRepository) {
         super(redisService);
         this.sessionRepository = sessionRepository;
     }
 
     /**
-     * 发送评估任务到 Redis Stream
-     *
-     * @param sessionId 面试会话ID
+     * 发送多维度评估任务到 Redis Stream
      */
-    public void sendEvaluateTask(String sessionId) {
+    public void sendMultipoleTask(String sessionId) {
         sendTask(sessionId);
     }
 
     @Override
     protected String taskDisplayName() {
-        return "评估";
+        return "多维度评估";
     }
 
     @Override
     protected String streamKey() {
-        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_STREAM_KEY;
+        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY;
     }
 
     @Override
@@ -62,9 +61,6 @@ public class EvaluateStreamProducer extends AbstractStreamProducer<String> {
         updateEvaluateStatus(sessionId, AsyncTaskStatus.FAILED, truncateError(error));
     }
 
-    /**
-     * 更新评估状态
-     */
     private void updateEvaluateStatus(String sessionId, AsyncTaskStatus status, String error) {
         sessionRepository.findBySessionId(sessionId).ifPresent(session -> {
             session.setEvaluateStatus(status);

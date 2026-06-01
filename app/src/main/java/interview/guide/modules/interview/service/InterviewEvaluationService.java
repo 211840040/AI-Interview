@@ -7,6 +7,7 @@ import interview.guide.modules.interview.model.EvaluationScoreEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.model.InterviewSessionEntity;
 import interview.guide.modules.interview.repository.EvaluationScoreRepository;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -37,34 +38,54 @@ public class InterviewEvaluationService {
     private static final String USER_PROMPT_PATH = "classpath:prompts/interview-evaluation-multipole-user.st";
 
     private record MultipoleReportDTO(
-        int overallScore,
-        List<DimensionScoreDTO> dimensions
-    ) {}
+            int overallScore,
+            List<DimensionScoreDTO> dimensions) {
+    }
 
     private record DimensionScoreDTO(
-        String name,
-        int score,
-        String anchorLabel,
-        String rationale,
-        List<Map<String, String>> evidence,
-        List<Map<String, String>> actionItems
-    ) {}
+            String name,
+            int score,
+            String anchorLabel,
+            String rationale,
+            List<Map<String, String>> evidence,
+            List<Map<String, String>> actionItems) {
+    }
 
     public void evaluateSession(ChatClient chatClient,
-                                InterviewSessionEntity session,
-                                String resumeText,
-                                List<InterviewQuestionDTO> questions) {
-        String sessionId = session.getSessionId();
+            InterviewSessionEntity session,
+            String resumeText,
+            List<InterviewQuestionDTO> questions) {
+        evaluateInternal(chatClient, session.getId(), session.getSkillId(), questions);
+    }
+
+    /**
+     * 语音面试多维度评估入口
+     * 从消息记录构建问答记录后再评估
+     */
+    public void evaluateVoiceSession(ChatClient chatClient,
+            interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity session,
+            List<InterviewQuestionDTO> questions) {
+        String skillId = session.getRoleType() != null && !session.getRoleType().isBlank()
+                ? session.getRoleType()
+                : null;
+        evaluateInternal(chatClient, session.getId(), skillId, questions);
+    }
+
+    private void evaluateInternal(ChatClient chatClient,
+            Long sessionDbId,
+            String skillId,
+            List<InterviewQuestionDTO> questions) {
         try {
             String qaRecords = buildQaRecords(questions);
-            String referenceContext = skillService.buildEvaluationReferenceSectionSafe(session.getSkillId());
+            String referenceContext = skillService.buildEvaluationReferenceSectionSafe(skillId);
 
             PromptTemplate systemTemplate = new PromptTemplate(loadPrompt(SYSTEM_PROMPT_PATH));
             PromptTemplate userTemplate = new PromptTemplate(loadPrompt(USER_PROMPT_PATH));
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("qaRecords", qaRecords);
-            variables.put("referenceContext", referenceContext != null && !referenceContext.isBlank() ? referenceContext : "无");
+            variables.put("referenceContext",
+                    referenceContext != null && !referenceContext.isBlank() ? referenceContext : "无");
 
             String systemPrompt = systemTemplate.render();
             String userPrompt = userTemplate.render(variables);
@@ -73,26 +94,25 @@ public class InterviewEvaluationService {
             String systemWithFormat = systemPrompt + "\n\n" + converter.getFormat();
 
             MultipoleReportDTO report = structuredOutputInvoker.invoke(
-                chatClient,
-                systemWithFormat,
-                userPrompt,
-                converter,
-                ErrorCode.INTERVIEW_EVALUATION_FAILED,
-                "多维度评估失败：",
-                "多维度评估",
-                log
-            );
+                    chatClient,
+                    systemWithFormat,
+                    userPrompt,
+                    converter,
+                    ErrorCode.INTERVIEW_EVALUATION_FAILED,
+                    "多维度评估失败：",
+                    "多维度评估",
+                    log);
 
             if (report == null || report.dimensions() == null || report.dimensions().isEmpty()) {
                 throw new BusinessException(ErrorCode.INTERVIEW_EVALUATION_FAILED, "多维度评估结果为空");
             }
 
-            persistScores(session.getId(), report, systemPrompt, userPrompt);
+            persistScores(sessionDbId, report, systemPrompt, userPrompt);
 
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("多维度评估持久化失败: sessionId={}, error={}", sessionId, e.getMessage(), e);
+            log.error("多维度评估持久化失败: sessionDbId={}, error={}", sessionDbId, e.getMessage(), e);
             throw new BusinessException(ErrorCode.INTERVIEW_EVALUATION_FAILED, "多维度评估失败: " + e.getMessage());
         }
     }
@@ -102,9 +122,9 @@ public class InterviewEvaluationService {
     }
 
     private void persistScores(Long sessionDbId,
-                               MultipoleReportDTO report,
-                               String systemPrompt,
-                               String userPrompt) {
+            MultipoleReportDTO report,
+            String systemPrompt,
+            String userPrompt) {
         LocalDateTime now = LocalDateTime.now();
         for (DimensionScoreDTO dim : report.dimensions()) {
             EvaluationScoreEntity entity = new EvaluationScoreEntity();
@@ -116,11 +136,10 @@ public class InterviewEvaluationService {
             entity.setEvidence(writeJson(dim.evidence()));
             entity.setActionItems(writeJson(dim.actionItems()));
             entity.setRawJson(writeJson(Map.of(
-                "overallScore", report.overallScore(),
-                "dimensions", report.dimensions(),
-                "systemPrompt", systemPrompt,
-                "userPrompt", userPrompt
-            )));
+                    "overallScore", report.overallScore(),
+                    "dimensions", report.dimensions(),
+                    "systemPrompt", systemPrompt,
+                    "userPrompt", userPrompt)));
             entity.setCreatedAt(now);
             evaluationScoreRepository.save(entity);
         }
