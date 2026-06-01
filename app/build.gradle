@@ -104,13 +104,18 @@ tasks.named('test') {
 // 将仓库根目录 .env 注入 bootRun，便于本地加载 AI_BAILIAN_API_KEY 等变量（Gradle 进程默认不读 .env）
 // 同时确保 JVM 使用 UTF-8 编码
 tasks.named('bootRun') {
-    // JVM 编码配置（stdout/stderr：JDK 18+，避免控制台 PrintStream 与 Logback UTF-8 不一致）
+    // Gradle 进程自身使用 UTF-8，避免 Windows 控制台 GBK 导致中文乱码
+    standardInput = System.in
     jvmArgs = [
             '-Dfile.encoding=UTF-8',
             '-Dconsole.encoding=UTF-8',
             '-Dstdout.encoding=UTF-8',
             '-Dstderr.encoding=UTF-8'
     ]
+    // 让 Gradle 任务输出也走 UTF-8
+    doFirst {
+        System.out.printf('[bootRun] JVM UTF-8 args applied%n')
+    }
 
     // 加载 .env 文件
     def envFile = rootProject.file('.env')

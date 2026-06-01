@@ -5,6 +5,7 @@
 build
 /.claude
 /.idea
+/.vscode
 /app/bin
 # Environment variables
 .env
