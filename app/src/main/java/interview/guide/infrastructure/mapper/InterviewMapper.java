@@ -97,7 +97,7 @@ public interface InterviewMapper {
         InterviewDetailDTO base = toDetailDTO(session, questions, strengths, improvements, referenceAnswers, answers);
         java.util.List<InterviewDetailDTO.EvaluationScoreDTO> evalDtos = (evaluations == null) ? java.util.List.of() : evaluations.stream().map(e -> new InterviewDetailDTO.EvaluationScoreDTO(
             e.getDimension(), e.getScore(), e.getAnchorLabel(), e.getRationale(),
-            parseJsonArrayToListOfMap(e.getEvidence()), parseJsonArrayToListOfMap(e.getActionItems()),
+            parseEvidence(e.getEvidence()), parseActionItems(e.getActionItems()),
             e.getCreatedAt() != null ? e.getCreatedAt().toString() : null
         )).toList();
 
@@ -109,10 +109,21 @@ public interface InterviewMapper {
         );
     }
 
-    default java.util.List<java.util.Map<String,String>> parseJsonArrayToListOfMap(String json) {
+    default java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.EvidenceItemDTO> parseEvidence(String json) {
         if (json == null || json.isBlank()) return java.util.List.of();
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.EvidenceItemDTO>>() {});
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
+
+    default java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.ActionItemDTO> parseActionItems(String json) {
+        if (json == null || json.isBlank()) return java.util.List.of();
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.ActionItemDTO>>() {});
         } catch (Exception e) {
             return java.util.List.of();
         }

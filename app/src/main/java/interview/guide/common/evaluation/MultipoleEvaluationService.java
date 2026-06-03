@@ -54,6 +54,15 @@ public class MultipoleEvaluationService {
             List<DimensionScoreDTO> dimensions) {
     }
 
+    public record EvidenceItemDTO(
+            String text
+    ) {}
+
+    public record ActionItemDTO(
+            String title,
+            String exercise
+    ) {}
+
     /**
      * 单个维度评分
      */
@@ -62,8 +71,8 @@ public class MultipoleEvaluationService {
             int score,
             String anchorLabel,
             String rationale,
-            List<Map<String, String>> evidence,
-            List<Map<String, String>> actionItems) {
+            List<EvidenceItemDTO> evidence,
+            List<ActionItemDTO> actionItems) {
     }
 
     /**

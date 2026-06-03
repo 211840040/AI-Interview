@@ -429,10 +429,10 @@ public class InterviewSessionService {
      * 重新触发多维度评估（覆盖已有评估数据）
      */
     @Transactional
-    public void reEvaluateMultipole(String sessionId) {
-        InterviewSessionEntity session = sessionRepository.findBySessionId(sessionId)
+    public void reEvaluateMultipole(Long dbSessionId) {
+        InterviewSessionEntity session = sessionRepository.findById(dbSessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND,
-                        "会话不存在: " + sessionId));
+                        "会话不存在: " + dbSessionId));
 
         // 删除已有的多维度评估分数
         evaluationScoreRepository.deleteBySessionId(session.getId());
@@ -442,10 +442,10 @@ public class InterviewSessionService {
         session.setEvaluateError(null);
         sessionRepository.save(session);
 
-        // 重新发送多维度评估任务
-        multipoleEvaluateStreamProducer.sendMultipoleTask(sessionId);
+        // 重新发送多维度评估任务（使用 UUID sessionId）
+        multipoleEvaluateStreamProducer.sendMultipoleTask(session.getSessionId());
 
-        log.info("会话 {} 重新触发多维度评估", sessionId);
+        log.info("会话 {} (id={}) 重新触发多维度评估", session.getSessionId(), dbSessionId);
     }
 
     /**

@@ -39,7 +39,7 @@ public class EvaluationController {
      * 重新触发文字面试的多维度评估（覆盖已有数据）
      */
     @PostMapping("/sessions/{sessionId}/re-evaluate")
-    public ResponseEntity<Result<Void>> reEvaluateMultipole(@PathVariable String sessionId) {
+    public ResponseEntity<Result<Void>> reEvaluateMultipole(@PathVariable Long sessionId) {
         interviewSessionService.reEvaluateMultipole(sessionId);
         return ResponseEntity.ok(Result.success());
     }
