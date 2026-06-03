@@ -12,8 +12,10 @@ import interview.guide.modules.voiceinterview.dto.VoiceEvaluationStatusDTO;
 import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
 import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
+import interview.guide.modules.voiceinterview.model.VoiceEvaluationScoreEntity;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewEvaluationService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
+import interview.guide.modules.voiceinterview.service.VoiceMultipoleEvaluationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +50,7 @@ public class VoiceInterviewController {
 
     private final VoiceInterviewService voiceInterviewService;
     private final VoiceInterviewEvaluationService evaluationService;
+    private final VoiceMultipoleEvaluationService voiceMultipoleEvaluationService;
     private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
 
     /**
@@ -214,5 +217,25 @@ public class VoiceInterviewController {
         return Result.success(VoiceEvaluationStatusDTO.builder()
                 .evaluateStatus(AsyncTaskStatus.PENDING.name())
                 .build());
+    }
+
+    /**
+     * 获取语音面试的多维度评估详情
+     */
+    @GetMapping("/sessions/{sessionId}/evaluation-details")
+    public Result<List<VoiceEvaluationScoreEntity>> getEvaluationDetails(@PathVariable Long sessionId) {
+        log.info("获取语音面试多维度评估详情: sessionId={}", sessionId);
+        List<VoiceEvaluationScoreEntity> scores = voiceMultipoleEvaluationService.getScoresBySessionId(sessionId);
+        return Result.success(scores);
+    }
+
+    /**
+     * 重新触发多维度评估（覆盖已有评估数据）
+     */
+    @PostMapping("/sessions/{sessionId}/re-evaluate")
+    public Result<Void> reEvaluateMultipole(@PathVariable Long sessionId) {
+        log.info("重新触发语音面试多维度评估: sessionId={}", sessionId);
+        voiceInterviewService.reEvaluateMultipole(sessionId);
+        return Result.success();
     }
 }

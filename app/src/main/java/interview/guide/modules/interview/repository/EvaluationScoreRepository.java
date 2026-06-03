@@ -15,4 +15,6 @@ public interface EvaluationScoreRepository extends JpaRepository<EvaluationScore
 
   List<EvaluationScoreEntity> findBySessionIdAndDimensionOrderByCreatedAtAsc(
       Long sessionId, String dimension);
+
+  void deleteBySessionId(Long sessionId);
 }

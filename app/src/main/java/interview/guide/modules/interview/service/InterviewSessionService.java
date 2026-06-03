@@ -19,10 +19,13 @@ import interview.guide.modules.interview.model.InterviewSessionEntity;
 import interview.guide.modules.interview.model.SubmitAnswerRequest;
 import interview.guide.modules.interview.model.SubmitAnswerResponse;
 import interview.guide.modules.interview.model.InterviewSessionDTO.SessionStatus;
+import interview.guide.modules.interview.repository.EvaluationScoreRepository;
+import interview.guide.modules.interview.repository.InterviewSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
@@ -47,6 +50,8 @@ public class InterviewSessionService {
     private final ObjectMapper objectMapper;
     private final EvaluateStreamProducer evaluateStreamProducer;
     private final MultipoleEvaluateStreamProducer multipoleEvaluateStreamProducer;
+    private final EvaluationScoreRepository evaluationScoreRepository;
+    private final InterviewSessionRepository sessionRepository;
     private final LlmProviderRegistry llmProviderRegistry;
 
     /**
@@ -418,6 +423,29 @@ public class InterviewSessionService {
         multipoleEvaluateStreamProducer.sendMultipoleTask(sessionId);
 
         log.info("会话 {} 提前交卷，评估任务已入队", sessionId);
+    }
+
+    /**
+     * 重新触发多维度评估（覆盖已有评估数据）
+     */
+    @Transactional
+    public void reEvaluateMultipole(String sessionId) {
+        InterviewSessionEntity session = sessionRepository.findBySessionId(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND,
+                        "会话不存在: " + sessionId));
+
+        // 删除已有的多维度评估分数
+        evaluationScoreRepository.deleteBySessionId(session.getId());
+
+        // 重置多维度评估状态
+        session.setMultipoleEvaluateStatus(null);
+        session.setEvaluateError(null);
+        sessionRepository.save(session);
+
+        // 重新发送多维度评估任务
+        multipoleEvaluateStreamProducer.sendMultipoleTask(sessionId);
+
+        log.info("会话 {} 重新触发多维度评估", sessionId);
     }
 
     /**

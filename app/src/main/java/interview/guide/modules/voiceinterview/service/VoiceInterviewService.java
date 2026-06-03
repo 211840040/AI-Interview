@@ -15,6 +15,7 @@ import interview.guide.modules.voiceinterview.listener.VoiceMultipoleEvaluateStr
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionStatus;
+import interview.guide.modules.voiceinterview.repository.VoiceEvaluationScoreRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewEvaluationRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewMessageRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewSessionRepository;
@@ -53,6 +54,7 @@ public class VoiceInterviewService {
     private final VoiceInterviewProperties properties;
     private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
     private final VoiceMultipoleEvaluateStreamProducer voiceMultipoleEvaluateStreamProducer;
+    private final VoiceEvaluationScoreRepository voiceEvaluationScoreRepository;
     private final LlmProviderRegistry llmProviderRegistry;
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
@@ -587,6 +589,29 @@ public class VoiceInterviewService {
         updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);
         voiceEvaluateStreamProducer.sendEvaluateTask(sessionId.toString());
         voiceMultipoleEvaluateStreamProducer.sendMultipoleTask(sessionId.toString());
+    }
+
+    /**
+     * 重新触发多维度评估（覆盖已有评估数据）
+     */
+    @Transactional
+    public void reEvaluateMultipole(Long sessionId) {
+        VoiceInterviewSessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND,
+                        "会话不存在: " + sessionId));
+
+        // 删除已有的多维度评估分数
+        voiceEvaluationScoreRepository.deleteBySessionId(sessionId);
+
+        // 重置多维度评估状态
+        session.setMultipoleEvaluateStatus(null);
+        session.setMultipoleEvaluateError(null);
+        sessionRepository.save(session);
+
+        // 重新发送多维度评估任务
+        voiceMultipoleEvaluateStreamProducer.sendMultipoleTask(sessionId.toString());
+
+        log.info("语音会话 {} 重新触发多维度评估", sessionId);
     }
 
     /**

@@ -68,6 +68,13 @@ public class VoiceMultipoleEvaluationService {
                 sessionDbId, report.dimensions().size());
     }
 
+    /**
+     * 获取语音面试会话的多维度评估详情
+     */
+    public List<VoiceEvaluationScoreEntity> getScoresBySessionId(Long sessionId) {
+        return voiceEvaluationScoreRepository.findBySessionId(sessionId);
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);

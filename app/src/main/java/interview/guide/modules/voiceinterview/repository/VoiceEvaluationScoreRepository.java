@@ -10,4 +10,6 @@ import java.util.List;
 public interface VoiceEvaluationScoreRepository extends JpaRepository<VoiceEvaluationScoreEntity, Long> {
 
     List<VoiceEvaluationScoreEntity> findBySessionId(Long sessionId);
+
+    void deleteBySessionId(Long sessionId);
 }
