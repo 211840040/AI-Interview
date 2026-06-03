@@ -8,11 +8,11 @@ import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.infrastructure.redis.RedisService;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
-import interview.guide.modules.interview.service.InterviewEvaluationService;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewMessageRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewSessionRepository;
+import interview.guide.modules.voiceinterview.service.VoiceMultipoleEvaluationService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.stream.StreamMessageId;
 import org.springframework.ai.chat.client.ChatClient;
@@ -37,18 +37,18 @@ public class VoiceMultipoleEvaluateStreamConsumer
 
     private final VoiceInterviewSessionRepository sessionRepository;
     private final VoiceInterviewMessageRepository messageRepository;
-    private final InterviewEvaluationService interviewEvaluationService;
+    private final VoiceMultipoleEvaluationService voiceMultipoleEvaluationService;
     private final LlmProviderRegistry llmProviderRegistry;
 
     public VoiceMultipoleEvaluateStreamConsumer(RedisService redisService,
             VoiceInterviewSessionRepository sessionRepository,
             VoiceInterviewMessageRepository messageRepository,
-            InterviewEvaluationService interviewEvaluationService,
+            VoiceMultipoleEvaluationService voiceMultipoleEvaluationService,
             LlmProviderRegistry llmProviderRegistry) {
         super(redisService);
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
-        this.interviewEvaluationService = interviewEvaluationService;
+        this.voiceMultipoleEvaluationService = voiceMultipoleEvaluationService;
         this.llmProviderRegistry = llmProviderRegistry;
     }
 
@@ -104,7 +104,8 @@ public class VoiceMultipoleEvaluateStreamConsumer
         try {
             sessionIdLong = Long.parseLong(sessionId);
         } catch (NumberFormatException e) {
-            throw new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND, "无效语音面试会话ID: " + sessionId);
+            throw new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND,
+                    "无效语音面试会话ID: " + sessionId);
         }
 
         Optional<VoiceInterviewSessionEntity> sessionOpt = sessionRepository.findById(sessionIdLong);
@@ -115,7 +116,6 @@ public class VoiceMultipoleEvaluateStreamConsumer
 
         VoiceInterviewSessionEntity session = sessionOpt.get();
 
-        // 构建问答记录：复用 VoiceInterviewEvaluationService 的对话数据
         List<VoiceInterviewMessageEntity> messages = messageRepository
                 .findBySessionIdOrderBySequenceNumAsc(sessionIdLong);
 
@@ -124,12 +124,11 @@ public class VoiceMultipoleEvaluateStreamConsumer
             return;
         }
 
-        // 调用多维度评估服务
         try {
             String provider = session.getLlmProvider();
             ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
-            interviewEvaluationService.evaluateVoiceSession(
+            voiceMultipoleEvaluationService.evaluateVoiceSession(
                     chatClient, session, buildQaRecordsFromMessages(messages));
         } catch (BusinessException e) {
             throw e;
@@ -143,7 +142,8 @@ public class VoiceMultipoleEvaluateStreamConsumer
     /**
      * 从语音面试消息构建问答记录
      */
-    private List<InterviewQuestionDTO> buildQaRecordsFromMessages(List<VoiceInterviewMessageEntity> messages) {
+    private List<InterviewQuestionDTO> buildQaRecordsFromMessages(
+            List<VoiceInterviewMessageEntity> messages) {
         List<InterviewQuestionDTO> qaRecords = new ArrayList<>();
         int index = 0;
 
@@ -152,18 +152,14 @@ public class VoiceMultipoleEvaluateStreamConsumer
             String userText = VoiceInterviewMessageEntity.trimToNull(msg.getUserRecognizedText());
 
             if (aiText != null) {
-                // AI问题
                 InterviewQuestionDTO question = InterviewQuestionDTO.create(
                         index, aiText, null, inferCategory(aiText), null, false, null);
-
                 if (userText != null) {
                     question = question.withAnswer(userText);
                 }
-
                 qaRecords.add(question);
                 index++;
             } else if (userText != null) {
-                // 用户直接回答（没有对应AI问题）
                 qaRecords.add(InterviewQuestionDTO.create(
                         index, "", null, "综合", null, false, null));
                 index++;
@@ -221,7 +217,7 @@ public class VoiceMultipoleEvaluateStreamConsumer
             Long sessionIdLong = Long.parseLong(sessionId);
             sessionRepository.findById(sessionIdLong).ifPresent(session -> {
                 session.setMultipoleEvaluateStatus(status);
-                session.setEvaluateError(error);
+                session.setMultipoleEvaluateError(error);
                 sessionRepository.save(session);
                 log.debug("语音面试多维度评估状态已更新: sessionId={}, status={}", sessionId, status);
             });

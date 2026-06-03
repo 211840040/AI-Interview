@@ -140,6 +140,7 @@ public class VoiceInterviewService {
         session.setStatus(VoiceInterviewSessionStatus.COMPLETED);
         session.setActualDuration((int) Duration.between(session.getStartTime(), LocalDateTime.now()).toSeconds());
         session.setEvaluateStatus(AsyncTaskStatus.PENDING);
+        session.setMultipoleEvaluateStatus(AsyncTaskStatus.PENDING);
 
         sessionRepository.save(session);
         invalidateSessionCache(session.getId());
