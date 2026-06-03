@@ -1,4 +1,5 @@
 import { request } from './request';
+import type { DimensionScore } from './evaluation';
 
 // ========== 类型定义 ==========
 
@@ -230,6 +231,15 @@ export const voiceInterviewApi = {
 
     return request.get<SessionMeta[]>(
       `/api/voice-interview/sessions?${params.toString()}`
+    );
+  },
+
+  /**
+   * 获取语音面试多维度评估详情
+   */
+  async getEvaluationDetails(sessionId: number): Promise<DimensionScore[]> {
+    return request.get<DimensionScore[]>(
+      `/api/voice-interview/sessions/${sessionId}/evaluation-details`
     );
   },
 

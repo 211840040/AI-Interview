@@ -9,6 +9,7 @@ export default function VoiceInterviewEvaluationPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const [evaluation, setEvaluation] = useState<VoiceEvaluationDetail | null>(null);
+  const [evidenceScores, setEvidenceScores] = useState<import('../api/evaluation').DimensionScore[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [evaluateStatus, setEvaluateStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,12 +45,26 @@ export default function VoiceInterviewEvaluationPage() {
     }
   };
 
-  const handleStatusResponse = (response: EvaluationStatusResponse) => {
+  const handleStatusResponse = async (response: EvaluationStatusResponse) => {
     const status = response.evaluateStatus;
     setEvaluateStatus(status);
 
     if (status === 'COMPLETED' && response.evaluation) {
       setEvaluation(response.evaluation);
+      // 获取多维度评估详情
+      try {
+        const scores = await voiceInterviewApi.getEvaluationDetails(parseInt(sessionId!));
+        // 解析 evidence 和 actionItems JSON 字符串
+        const parsed = (scores as any[]).map((s) => ({
+          ...s,
+          evidence: typeof s.evidence === 'string' ? JSON.parse(s.evidence) : s.evidence,
+          actionItems: typeof s.actionItems === 'string' ? JSON.parse(s.actionItems) : s.actionItems,
+        })) as import('../api/evaluation').DimensionScore[];
+        setEvidenceScores(parsed);
+      } catch {
+        // 多维度评估可能尚未完成，不影响主评估展示
+        console.warn('获取语音面试多维度评估详情失败');
+      }
       setLoading(false);
     } else if (status === 'FAILED') {
       setError(response.evaluateError || '评估生成失败');
@@ -74,6 +89,17 @@ export default function VoiceInterviewEvaluationPage() {
 
         if (status === 'COMPLETED' && response.evaluation) {
           setEvaluation(response.evaluation);
+          // 获取多维度评估详情
+          voiceInterviewApi.getEvaluationDetails(parseInt(sessionId))
+            .then(scores => {
+              const parsed = (scores as any[]).map((s) => ({
+                ...s,
+                evidence: typeof s.evidence === 'string' ? JSON.parse(s.evidence) : s.evidence,
+                actionItems: typeof s.actionItems === 'string' ? JSON.parse(s.actionItems) : s.actionItems,
+              })) as import('../api/evaluation').DimensionScore[];
+              setEvidenceScores(parsed);
+            })
+            .catch(() => console.warn('获取语音面试多维度评估详情失败'));
           setLoading(false);
         } else if (status === 'FAILED') {
           setError(response.evaluateError || '评估生成失败');
@@ -117,6 +143,7 @@ export default function VoiceInterviewEvaluationPage() {
       completedAt: '',
       strengths: evaluation.strengths,
       improvements: evaluation.improvements,
+      evidenceScores: evidenceScores ?? undefined,
       answers: evaluation.answers.map(a => ({
         questionIndex: a.questionIndex,
         question: a.question,
@@ -129,7 +156,7 @@ export default function VoiceInterviewEvaluationPage() {
         answeredAt: '',
       })),
     };
-  }, [evaluation, sessionId]);
+  }, [evaluation, sessionId, evidenceScores]);
 
   // Loading state
   if (loading) {
@@ -179,7 +206,7 @@ export default function VoiceInterviewEvaluationPage() {
 
   return (
     <div className="pb-10">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => navigate('/interviews')}

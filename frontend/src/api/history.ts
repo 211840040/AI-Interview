@@ -1,4 +1,5 @@
 import { request } from './request';
+import type { DimensionScore } from './evaluation';
 
 export type AnalyzeStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type EvaluateStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
@@ -52,6 +53,7 @@ export interface InterviewItem {
   strengths?: string[];
   improvements?: string[];
   referenceAnswers?: unknown[];
+  evidenceScores?: DimensionScore[];
 }
 
 export interface AnswerItem {
