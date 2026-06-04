@@ -2,6 +2,7 @@ import {useMemo, useState} from 'react';
 import {AnimatePresence, motion} from 'framer-motion';
 import {getScoreColor} from '../utils/score';
 import type {InterviewDetail} from '../api/history';
+import EvaluationSummary from './EvaluationSummary';
 
 interface InterviewDetailPanelProps {
   interview: InterviewDetail;
@@ -11,14 +12,8 @@ interface InterviewDetailPanelProps {
  * 面试详情面板组件
  */
 export default function InterviewDetailPanel({ interview }: InterviewDetailPanelProps) {
-  // 默认展开所有题目
-  const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(() => {
-    const allIndices = new Set<number>();
-    if (interview.answers) {
-      interview.answers.forEach((_, idx) => allIndices.add(idx));
-    }
-    return allIndices;
-  });
+  // 默认收缩所有题目
+  const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set());
 
   const toggleQuestion = (index: number) => {
     setExpandedQuestions(prev => {
@@ -55,6 +50,11 @@ export default function InterviewDetailPanel({ interview }: InterviewDetailPanel
         strokeDashoffset={strokeDashoffset}
       />
 
+      {/* 四维度评分 */}
+      {interview.evidenceScores && interview.evidenceScores.length > 0 && (
+        <EvaluationSummary dimensions={interview.evidenceScores} />
+      )}
+
       {/* 表现优势 */}
       {interview.strengths && interview.strengths.length > 0 && (
         <StrengthsSection strengths={interview.strengths} />
@@ -90,11 +90,11 @@ function ScoreCard({
   strokeDashoffset: number;
 }) {
   return (
-    <div className="bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 rounded-2xl p-8 text-white">
-      <div className="flex flex-col items-center text-center">
+    <div className="bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 rounded-2xl p-6 text-white">
+      <div className="flex items-center gap-6">
         {/* 圆环进度条 */}
-        <div className="relative w-32 h-32 mb-6">
-          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+        <div className="relative w-24 h-24 shrink-0">
+          <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 120 120">
             <circle
               cx="60"
               cy="60"
@@ -119,80 +119,96 @@ function ScoreCard({
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <motion.span
-              className="text-4xl font-bold"
+              className="text-2xl font-bold"
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.5 }}
             >
               {score ?? '-'}
             </motion.span>
-            <span className="text-sm text-white/70">总分</span>
+            <span className="text-xs text-white/70">总分</span>
           </div>
         </div>
 
-        <h3 className="text-2xl font-bold mb-3">面试评估</h3>
-        <p className="text-white/90 max-w-2xl leading-relaxed">
-          {feedback || '表现良好，展示了扎实的技术基础。'}
-        </p>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-xl font-bold mb-2">面试评估</h3>
+          <p className="text-white/90 leading-relaxed text-sm">
+            {feedback || '表现良好，展示了扎实的技术基础。'}
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-// 优势部分组件
+// 总体表现组件（可折叠，默认收缩）
 function StrengthsSection({ strengths }: { strengths: string[] }) {
   return (
-      <motion.div
-          className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-    >
-        <h4 className="font-semibold text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-2">
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <polyline points="22,4 12,14.01 9,11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        表现优势
-      </h4>
-      <ul className="space-y-3">
-        {strengths.map((s: string, i: number) => (
+    <details className="group bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
+      <summary className="flex items-center justify-between p-6 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors rounded-2xl select-none">
+        <h4 className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <polyline points="22,4 12,14.01 9,11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          总体表现
+        </h4>
+        <motion.svg
+          className="w-5 h-5 text-slate-400"
+          animate={{ rotate: 0 }}
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <polyline points="6,9 12,15 18,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </motion.svg>
+      </summary>
+      <div className="px-6 pb-6">
+        <ul className="space-y-3">
+          {strengths.map((s: string, i: number) => (
             <li key={i} className="text-slate-700 dark:text-slate-300 flex items-start gap-3">
-            <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 flex-shrink-0"></span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ul>
-    </motion.div>
+              <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 flex-shrink-0"></span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   );
 }
 
-// 改进建议部分组件
+// 总体建议组件（可折叠，默认收缩）
 function ImprovementsSection({ improvements }: { improvements: string[] }) {
   return (
-      <motion.div
-          className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
-    >
-        <h4 className="font-semibold text-amber-600 dark:text-amber-400 mb-4 flex items-center gap-2">
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-          <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
-        改进建议
-      </h4>
-      <ul className="space-y-3">
-        {improvements.map((s: string, i: number) => (
+    <details className="group bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
+      <summary className="flex items-center justify-between p-6 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors rounded-2xl select-none">
+        <h4 className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-2">
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+            <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          总体建议
+        </h4>
+        <motion.svg
+          className="w-5 h-5 text-slate-400"
+          animate={{ rotate: 0 }}
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <polyline points="6,9 12,15 18,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </motion.svg>
+      </summary>
+      <div className="px-6 pb-6">
+        <ul className="space-y-3">
+          {improvements.map((s: string, i: number) => (
             <li key={i} className="text-slate-700 dark:text-slate-300 flex items-start gap-3">
-            <span className="w-2 h-2 bg-amber-500 rounded-full mt-2 flex-shrink-0"></span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ul>
-    </motion.div>
+              <span className="w-2 h-2 bg-amber-500 rounded-full mt-2 flex-shrink-0"></span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   );
 }
 

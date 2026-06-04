@@ -8,6 +8,7 @@ import interview.guide.modules.llmprovider.repository.LlmGlobalSettingRepository
 import interview.guide.modules.llmprovider.repository.LlmProviderRepository;
 import jakarta.annotation.PostConstruct;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,75 @@ public class LlmProviderBootstrapService {
     if (providerRepository.count() == 0) {
       seedProviders();
     }
+    else {
+      syncDotEnvProviders();
+    }
     ensureGlobalSetting();
+  }
+
+  /**
+   * On every startup, sync dotenv-driven fields for providers whose application.yml
+   * uses ${...} placeholders. Spring resolves placeholders to actual values,
+   * so we check whether the config model contains a known dotenv var name as a
+   * hint — but that won't work after resolution.
+   *
+   * Instead, we maintain a whitelist of providers that are configured via .env
+   * placeholders, and always sync them on startup.
+   */
+  private static final Set<String> DOTENV_PROVIDERS = Set.of("dashscope");
+
+  private void syncDotEnvProviders() {
+    Map<String, ProviderConfig> providers = properties.getProviders();
+    if (providers == null || providers.isEmpty()) {
+      return;
+    }
+
+    for (Map.Entry<String, ProviderConfig> entry : providers.entrySet()) {
+      String id = entry.getKey();
+      ProviderConfig config = entry.getValue();
+      if (!DOTENV_PROVIDERS.contains(id)) {
+        continue;
+      }
+      if (config == null || isBlank(config.getModel())) {
+        continue;
+      }
+
+      String modelValue = config.getModel();
+      String apiKeyValue = config.getApiKey();
+
+      providerRepository.findById(id).ifPresentOrElse(entity -> {
+        if (modelValue.equals(entity.getModel())) {
+          return;
+        }
+        ApiKeyEncryptionService.EncryptedValue encrypted =
+            encryptionService.encrypt(apiKeyValue != null ? apiKeyValue : "");
+        entity.setApiKeyNonce(encrypted.nonce());
+        entity.setApiKeyCiphertext(encrypted.ciphertext());
+        entity.setModel(modelValue);
+        providerRepository.save(entity);
+        log.info("Synced dotenv provider: id={}, model={}", id, modelValue);
+      }, () -> {
+        ApiKeyEncryptionService.EncryptedValue encrypted =
+            encryptionService.encrypt(apiKeyValue != null ? apiKeyValue : "");
+        boolean supportsEmbedding = Boolean.TRUE.equals(config.getSupportsEmbedding())
+            || !isBlank(config.getEmbeddingModel());
+        LlmProviderEntity entity = LlmProviderEntity.builder()
+            .id(id)
+            .baseUrl(config.getBaseUrl())
+            .apiKeyNonce(encrypted.nonce())
+            .apiKeyCiphertext(encrypted.ciphertext())
+            .model(modelValue)
+            .embeddingModel(trimOrNull(config.getEmbeddingModel()))
+            .embeddingDimensions(resolveEmbeddingDimensions(config.getEmbeddingDimensions()))
+            .supportsEmbedding(supportsEmbedding)
+            .temperature(config.getTemperature())
+            .enabled(true)
+            .builtin(true)
+            .build();
+        providerRepository.save(entity);
+        log.info("Created missing dotenv provider: id={}", id);
+      });
+    }
   }
 
   private void seedProviders() {

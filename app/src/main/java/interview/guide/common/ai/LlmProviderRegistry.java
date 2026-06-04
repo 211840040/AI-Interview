@@ -119,8 +119,11 @@ public class LlmProviderRegistry {
      * Get a ChatClient for the specified provider, falling back to the default if null or blank.
      */
     public ChatClient getChatClientOrDefault(String providerId) {
-        if (providerId != null && !providerId.isBlank()) {
-            return getChatClient(providerId);
+        if (providerId != null) {
+            String id = providerId.trim();
+            if (!id.isBlank() && !id.equalsIgnoreCase("default")) {
+                return getChatClient(id);
+            }
         }
         return getDefaultChatClient();
     }

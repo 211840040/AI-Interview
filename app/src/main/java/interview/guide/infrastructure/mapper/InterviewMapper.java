@@ -75,6 +75,7 @@ public interface InterviewMapper {
     @Mapping(target = "improvements", source = "improvements")
     @Mapping(target = "referenceAnswers", source = "referenceAnswers")
     @Mapping(target = "answers", source = "answers")
+    @Mapping(target = "evidenceScores", ignore = true)
     InterviewDetailDTO toDetailDTO(
         InterviewSessionEntity session,
         List<Object> questions,
@@ -83,6 +84,50 @@ public interface InterviewMapper {
         List<Object> referenceAnswers,
         List<InterviewDetailDTO.AnswerDetailDTO> answers
     );
+
+    default InterviewDetailDTO toDetailDTOWithEvaluations(
+        InterviewSessionEntity session,
+        List<Object> questions,
+        List<String> strengths,
+        List<String> improvements,
+        List<Object> referenceAnswers,
+        List<InterviewDetailDTO.AnswerDetailDTO> answers,
+        List<interview.guide.modules.interview.model.EvaluationScoreEntity> evaluations
+    ) {
+        InterviewDetailDTO base = toDetailDTO(session, questions, strengths, improvements, referenceAnswers, answers);
+        java.util.List<InterviewDetailDTO.EvaluationScoreDTO> evalDtos = (evaluations == null) ? java.util.List.of() : evaluations.stream().map(e -> new InterviewDetailDTO.EvaluationScoreDTO(
+            e.getDimension(), e.getScore(), e.getAnchorLabel(), e.getRationale(),
+            parseEvidence(e.getEvidence()), parseActionItems(e.getActionItems()),
+            e.getCreatedAt() != null ? e.getCreatedAt().toString() : null
+        )).toList();
+
+        // construct new InterviewDetailDTO with evidenceScores populated
+        return new InterviewDetailDTO(
+            base.id(), base.sessionId(), base.totalQuestions(), base.status(), base.evaluateStatus(), base.evaluateError(),
+            base.overallScore(), base.overallFeedback(), base.createdAt(), base.completedAt(), base.questions(), base.strengths(),
+            base.improvements(), base.referenceAnswers(), base.answers(), evalDtos
+        );
+    }
+
+    default java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.EvidenceItemDTO> parseEvidence(String json) {
+        if (json == null || json.isBlank()) return java.util.List.of();
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.EvidenceItemDTO>>() {});
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
+
+    default java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.ActionItemDTO> parseActionItems(String json) {
+        if (json == null || json.isBlank()) return java.util.List.of();
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.List<interview.guide.common.evaluation.MultipoleEvaluationService.ActionItemDTO>>() {});
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
 
     // ========== InterviewSessionEntity 更新映射 ==========
 

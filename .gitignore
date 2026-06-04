@@ -5,6 +5,7 @@
 build
 /.claude
 /.idea
+/.vscode
 /app/bin
 # Environment variables
 .env
@@ -19,6 +20,7 @@ SETUP_API_KEYS.md
 # AI Assistant documentation
 CLAUDE.md
 GEMINI.md
+.codegraph
 
 # Playwright MCP
 .playwright-mcp/

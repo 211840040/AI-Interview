@@ -17,6 +17,7 @@ public record InterviewSessionDTO(
         CREATED,      // 会话已创建
         IN_PROGRESS,  // 面试进行中
         COMPLETED,    // 面试已完成
+        EVALUATING,   // 评估进行中
         EVALUATED     // 已生成评估报告
     }
 }

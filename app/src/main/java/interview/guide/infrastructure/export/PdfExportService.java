@@ -302,6 +302,7 @@ public class PdfExportService {
         return switch (status) {
             case CREATED -> "已创建";
             case IN_PROGRESS -> "进行中";
+            case EVALUATING -> "评估中";
             case COMPLETED -> "已完成";
             case EVALUATED -> "已评估";
         };

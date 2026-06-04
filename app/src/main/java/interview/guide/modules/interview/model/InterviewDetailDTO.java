@@ -1,5 +1,7 @@
 package interview.guide.modules.interview.model;
 
+import interview.guide.common.evaluation.MultipoleEvaluationService.ActionItemDTO;
+import interview.guide.common.evaluation.MultipoleEvaluationService.EvidenceItemDTO;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,8 +23,18 @@ public record InterviewDetailDTO(
     List<String> strengths,
     List<String> improvements,
     List<Object> referenceAnswers,
-    List<AnswerDetailDTO> answers
+    List<AnswerDetailDTO> answers,
+    List<EvaluationScoreDTO> evidenceScores
 ) {
+    public record EvaluationScoreDTO(
+        String dimension,
+        Integer score,
+        String anchorLabel,
+        String rationale,
+        List<EvidenceItemDTO> evidence,
+        List<ActionItemDTO> actionItems,
+        String createdAt
+    ) {}
     /**
      * 答案详情DTO
      */

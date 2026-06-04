@@ -28,6 +28,8 @@ import java.util.Optional;
 public class InterviewHistoryService {
 
     private final InterviewPersistenceService interviewPersistenceService;
+    private final interview.guide.modules.interview.repository.EvaluationScoreRepository evaluationScoreRepository;
+
     private final PdfExportService pdfExportService;
     private final ObjectMapper objectMapper;
     private final InterviewMapper interviewMapper;
@@ -63,13 +65,16 @@ public class InterviewHistoryService {
         );
 
         // 使用 MapStruct 组装最终 DTO
-        return interviewMapper.toDetailDTO(
+        // 查询评估记录并注入到 DTO
+        java.util.List<interview.guide.modules.interview.model.EvaluationScoreEntity> evals = evaluationScoreRepository.findBySessionId(session.getId());
+        return interviewMapper.toDetailDTOWithEvaluations(
             session,
             questions,
             strengths,
             improvements,
             referenceAnswers,
-            answerList
+            answerList,
+            evals
         );
     }
 

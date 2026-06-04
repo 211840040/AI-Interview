@@ -11,6 +11,7 @@ import interview.guide.modules.interview.model.InterviewReportDTO;
 import interview.guide.modules.interview.model.InterviewSessionEntity;
 import interview.guide.modules.interview.repository.InterviewAnswerRepository;
 import interview.guide.modules.interview.repository.InterviewSessionRepository;
+import interview.guide.modules.interview.repository.EvaluationScoreRepository;
 import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,22 +35,23 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class InterviewPersistenceService {
-    
+
     private final InterviewSessionRepository sessionRepository;
     private final InterviewAnswerRepository answerRepository;
+    private final EvaluationScoreRepository evaluationScoreRepository;
     private final ResumeRepository resumeRepository;
     private final ObjectMapper objectMapper;
-    
+
     /**
      * 保存新的面试会话（支持可选简历）
      */
     @Transactional(rollbackFor = Exception.class)
     public InterviewSessionEntity saveSession(String sessionId, Long resumeId,
-                                              int totalQuestions,
-                                              List<InterviewQuestionDTO> questions,
-                                              String llmProvider,
-                                              String skillId,
-                                              String difficulty) {
+            int totalQuestions,
+            List<InterviewQuestionDTO> questions,
+            String llmProvider,
+            String skillId,
+            String difficulty) {
         try {
             InterviewSessionEntity session = new InterviewSessionEntity();
             session.setSessionId(sessionId);
@@ -57,7 +59,7 @@ public class InterviewPersistenceService {
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
             session.setQuestionsJson(objectMapper.writeValueAsString(questions));
-            session.setLlmProvider(llmProvider != null ? llmProvider : "default");
+            session.setLlmProvider(llmProvider != null ? llmProvider : null);
             session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
             session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
 
@@ -76,7 +78,7 @@ public class InterviewPersistenceService {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "保存会话失败");
         }
     }
-    
+
     /**
      * 更新会话状态
      */
@@ -87,7 +89,7 @@ public class InterviewPersistenceService {
             InterviewSessionEntity session = sessionOpt.get();
             session.setStatus(status);
             if (status == InterviewSessionEntity.SessionStatus.COMPLETED ||
-                status == InterviewSessionEntity.SessionStatus.EVALUATED) {
+                    status == InterviewSessionEntity.SessionStatus.EVALUATED) {
                 session.setCompletedAt(LocalDateTime.now());
             }
             sessionRepository.save(session);
@@ -112,7 +114,36 @@ public class InterviewPersistenceService {
             log.debug("评估状态已更新: sessionId={}, status={}", sessionId, status);
         }
     }
-    
+
+    /**
+     * 当一个评估完成后检查是否两个评估都已完成，是则标记会话为 COMPLETED
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void checkAndMarkComplete(String sessionId) {
+        Optional<InterviewSessionEntity> sessionOpt = sessionRepository.findBySessionId(sessionId);
+        if (sessionOpt.isEmpty()) {
+            return;
+        }
+        InterviewSessionEntity session = sessionOpt.get();
+        // 如果已经是 COMPLETED，不再重复处理
+        if (session.getStatus() == InterviewSessionEntity.SessionStatus.COMPLETED) {
+            return;
+        }
+        // 原评估和多维度评估都达到终态（COMPLETED 或 FAILED）才标记会话完成
+        AsyncTaskStatus evalStatus = session.getEvaluateStatus();
+        AsyncTaskStatus multipoleStatus = session.getMultipoleEvaluateStatus();
+        boolean evalDone = evalStatus != null && evalStatus != AsyncTaskStatus.PENDING
+                && evalStatus != AsyncTaskStatus.PROCESSING;
+        boolean multipoleDone = multipoleStatus != null && multipoleStatus != AsyncTaskStatus.PENDING
+                && multipoleStatus != AsyncTaskStatus.PROCESSING;
+        if (evalDone && multipoleDone) {
+            session.setStatus(InterviewSessionEntity.SessionStatus.COMPLETED);
+            session.setCompletedAt(LocalDateTime.now());
+            log.info("所有评估完成，会话标记为 COMPLETED: sessionId={}, evalStatus={}, multipoleStatus={}",
+                    sessionId, evalStatus, multipoleStatus);
+        }
+    }
+
     /**
      * 更新当前问题索引
      */
@@ -126,27 +157,27 @@ public class InterviewPersistenceService {
             sessionRepository.save(session);
         }
     }
-    
+
     /**
      * 保存面试答案
      */
     @Transactional(rollbackFor = Exception.class)
     public InterviewAnswerEntity saveAnswer(String sessionId, int questionIndex,
-                                            String question, String category,
-                                            String userAnswer, int score, String feedback) {
+            String question, String category,
+            String userAnswer, int score, String feedback) {
         Optional<InterviewSessionEntity> sessionOpt = sessionRepository.findBySessionId(sessionId);
         if (sessionOpt.isEmpty()) {
             throw new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND);
         }
 
         InterviewAnswerEntity answer = answerRepository
-            .findBySession_SessionIdAndQuestionIndex(sessionId, questionIndex)
-            .orElseGet(() -> {
-                InterviewAnswerEntity created = new InterviewAnswerEntity();
-                created.setSession(sessionOpt.get());
-                created.setQuestionIndex(questionIndex);
-                return created;
-            });
+                .findBySession_SessionIdAndQuestionIndex(sessionId, questionIndex)
+                .orElseGet(() -> {
+                    InterviewAnswerEntity created = new InterviewAnswerEntity();
+                    created.setSession(sessionOpt.get());
+                    created.setQuestionIndex(questionIndex);
+                    return created;
+                });
 
         answer.setQuestion(question);
         answer.setCategory(category);
@@ -155,12 +186,12 @@ public class InterviewPersistenceService {
         answer.setFeedback(feedback);
 
         InterviewAnswerEntity saved = answerRepository.save(answer);
-        log.info("面试答案已保存: sessionId={}, questionIndex={}, score={}", 
+        log.info("面试答案已保存: sessionId={}, questionIndex={}, score={}",
                 sessionId, questionIndex, score);
-        
+
         return saved;
     }
-    
+
     /**
      * 保存面试报告
      */
@@ -185,21 +216,20 @@ public class InterviewPersistenceService {
             sessionRepository.save(session);
 
             // 查询已存在的答案，建立索引
-            List<InterviewAnswerEntity> existingAnswers = answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
+            List<InterviewAnswerEntity> existingAnswers = answerRepository
+                    .findBySession_SessionIdOrderByQuestionIndex(sessionId);
             java.util.Map<Integer, InterviewAnswerEntity> answerMap = existingAnswers.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    InterviewAnswerEntity::getQuestionIndex,
-                    a -> a,
-                    (a1, a2) -> a1
-                ));
+                    .collect(java.util.stream.Collectors.toMap(
+                            InterviewAnswerEntity::getQuestionIndex,
+                            a -> a,
+                            (a1, a2) -> a1));
 
             // 建立参考答案索引
             java.util.Map<Integer, InterviewReportDTO.ReferenceAnswer> refAnswerMap = report.referenceAnswers().stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    InterviewReportDTO.ReferenceAnswer::questionIndex,
-                    r -> r,
-                    (r1, r2) -> r1
-                ));
+                    .collect(java.util.stream.Collectors.toMap(
+                            InterviewReportDTO.ReferenceAnswer::questionIndex,
+                            r -> r,
+                            (r1, r2) -> r1));
 
             List<InterviewAnswerEntity> answersToSave = new java.util.ArrayList<>();
 
@@ -214,7 +244,7 @@ public class InterviewPersistenceService {
                     answer.setQuestionIndex(eval.questionIndex());
                     answer.setQuestion(eval.question());
                     answer.setCategory(eval.category());
-                    answer.setUserAnswer(null);  // 未回答
+                    answer.setUserAnswer(null); // 未回答
                     log.debug("为未回答的题目 {} 创建答案记录", eval.questionIndex());
                 }
 
@@ -236,20 +266,20 @@ public class InterviewPersistenceService {
 
             answerRepository.saveAll(answersToSave);
             log.info("面试报告已保存: sessionId={}, score={}, 答案数={}",
-                sessionId, report.overallScore(), answersToSave.size());
+                    sessionId, report.overallScore(), answersToSave.size());
 
         } catch (JacksonException e) {
             log.error("序列化报告失败: {}", e.getMessage(), e);
         }
     }
-    
+
     /**
      * 根据会话ID获取会话
      */
     public Optional<InterviewSessionEntity> findBySessionId(String sessionId) {
         return sessionRepository.findBySessionId(sessionId);
     }
-    
+
     /**
      * 获取简历的所有面试记录
      */
@@ -263,7 +293,7 @@ public class InterviewPersistenceService {
     public List<InterviewSessionEntity> findAll() {
         return sessionRepository.findAllByOrderByCreatedAtDesc();
     }
-    
+
     /**
      * 删除简历的所有面试会话
      * 由于InterviewSessionEntity设置了cascade = CascadeType.ALL, orphanRemoval = true
@@ -277,7 +307,7 @@ public class InterviewPersistenceService {
             log.info("已删除 {} 个面试会话（包含所有答案）", sessions.size());
         }
     }
-    
+
     /**
      * 删除单个面试会话
      * 由于InterviewSessionEntity设置了cascade = CascadeType.ALL, orphanRemoval = true
@@ -287,24 +317,27 @@ public class InterviewPersistenceService {
     public void deleteSessionBySessionId(String sessionId) {
         Optional<InterviewSessionEntity> sessionOpt = sessionRepository.findBySessionId(sessionId);
         if (sessionOpt.isPresent()) {
-            sessionRepository.delete(sessionOpt.get());
-            log.info("已删除面试会话: sessionId={}", sessionId);
+            InterviewSessionEntity session = sessionOpt.get();
+            // 先删除关联的评估分数记录
+            evaluationScoreRepository.deleteBySessionId(session.getId());
+            // 再删除会话
+            sessionRepository.delete(session);
+            log.info("已删除面试会话及其评估数据: sessionId={}", sessionId);
         } else {
             throw new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND);
         }
     }
-    
+
     /**
      * 查找未完成的面试会话（CREATED或IN_PROGRESS状态）
      */
     public Optional<InterviewSessionEntity> findUnfinishedSession(Long resumeId) {
         List<InterviewSessionEntity.SessionStatus> unfinishedStatuses = List.of(
-            InterviewSessionEntity.SessionStatus.CREATED,
-            InterviewSessionEntity.SessionStatus.IN_PROGRESS
-        );
+                InterviewSessionEntity.SessionStatus.CREATED,
+                InterviewSessionEntity.SessionStatus.IN_PROGRESS);
         return sessionRepository.findFirstByResumeIdAndStatusInOrderByCreatedAtDesc(resumeId, unfinishedStatuses);
     }
-    
+
     /**
      * 根据会话ID查找所有答案
      */
@@ -330,28 +363,29 @@ public class InterviewPersistenceService {
 
         LinkedHashSet<String> seen = new LinkedHashSet<>();
         List<HistoricalQuestion> result = sessions.stream()
-            .map(InterviewSessionEntity::getQuestionsJson)
-            .filter(json -> json != null && !json.isEmpty())
-            .flatMap(json -> {
-                try {
-                    List<InterviewQuestionDTO> questions = objectMapper.readValue(json,
-                        new TypeReference<List<InterviewQuestionDTO>>() {});
-                    return questions.stream()
-                        .filter(q -> !q.isFollowUp())
-                        .map(q -> new HistoricalQuestion(q.question(), q.type(), q.topicSummary()));
-                } catch (Exception e) {
-                    log.error("解析历史问题JSON失败", e);
-                    return java.util.stream.Stream.<HistoricalQuestion>empty();
-                }
-            })
-            .filter(hq -> seen.add(hq.question()))
-            .limit(MAX_HISTORICAL_QUESTIONS)
-            .toList();
+                .map(InterviewSessionEntity::getQuestionsJson)
+                .filter(json -> json != null && !json.isEmpty())
+                .flatMap(json -> {
+                    try {
+                        List<InterviewQuestionDTO> questions = objectMapper.readValue(json,
+                                new TypeReference<List<InterviewQuestionDTO>>() {
+                                });
+                        return questions.stream()
+                                .filter(q -> !q.isFollowUp())
+                                .map(q -> new HistoricalQuestion(q.question(), q.type(), q.topicSummary()));
+                    } catch (Exception e) {
+                        log.error("解析历史问题JSON失败", e);
+                        return java.util.stream.Stream.<HistoricalQuestion>empty();
+                    }
+                })
+                .filter(hq -> seen.add(hq.question()))
+                .limit(MAX_HISTORICAL_QUESTIONS)
+                .toList();
 
         log.info("历史题目加载完成: 去重后 {} 道主问题，按分类: {}", result.size(),
-            result.stream().collect(java.util.stream.Collectors.groupingBy(
-                hq -> hq.type() != null ? hq.type() : "GENERAL",
-                java.util.stream.Collectors.counting())));
+                result.stream().collect(java.util.stream.Collectors.groupingBy(
+                        hq -> hq.type() != null ? hq.type() : "GENERAL",
+                        java.util.stream.Collectors.counting())));
 
         return result;
     }

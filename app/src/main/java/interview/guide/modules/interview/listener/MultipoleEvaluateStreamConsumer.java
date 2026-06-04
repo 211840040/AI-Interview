@@ -7,10 +7,9 @@ import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.infrastructure.redis.RedisService;
 import interview.guide.modules.interview.model.InterviewAnswerEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
-import interview.guide.modules.interview.model.InterviewReportDTO;
 import interview.guide.modules.interview.model.InterviewSessionEntity;
 import interview.guide.modules.interview.repository.InterviewSessionRepository;
-import interview.guide.modules.interview.service.AnswerEvaluationService;
+import interview.guide.modules.interview.service.InterviewEvaluationService;
 import interview.guide.modules.interview.service.InterviewPersistenceService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.stream.StreamMessageId;
@@ -24,60 +23,61 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 面试评估 Stream 消费者
- * 负责从 Redis Stream 消费消息并执行评估
+ * 面试多维度评估 Stream 消费者
+ * 负责从 Redis Stream 消费消息并执行多维度评估
  */
 @Slf4j
 @Component
-public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStreamConsumer.EvaluatePayload> {
+public class MultipoleEvaluateStreamConsumer
+        extends AbstractStreamConsumer<MultipoleEvaluateStreamConsumer.EvaluatePayload> {
 
     private final InterviewSessionRepository sessionRepository;
-    private final AnswerEvaluationService evaluationService;
+    private final InterviewEvaluationService interviewEvaluationService;
     private final InterviewPersistenceService persistenceService;
     private final ObjectMapper objectMapper;
     private final LlmProviderRegistry llmProviderRegistry;
 
-    public EvaluateStreamConsumer(
-        RedisService redisService,
-        InterviewSessionRepository sessionRepository,
-        AnswerEvaluationService evaluationService,
-        InterviewPersistenceService persistenceService,
-        ObjectMapper objectMapper,
-        LlmProviderRegistry llmProviderRegistry
-    ) {
+    public MultipoleEvaluateStreamConsumer(
+            RedisService redisService,
+            InterviewSessionRepository sessionRepository,
+            InterviewEvaluationService interviewEvaluationService,
+            InterviewPersistenceService persistenceService,
+            ObjectMapper objectMapper,
+            LlmProviderRegistry llmProviderRegistry) {
         super(redisService);
         this.sessionRepository = sessionRepository;
-        this.evaluationService = evaluationService;
+        this.interviewEvaluationService = interviewEvaluationService;
         this.persistenceService = persistenceService;
         this.objectMapper = objectMapper;
         this.llmProviderRegistry = llmProviderRegistry;
     }
 
-    record EvaluatePayload(String sessionId) {}
+    record EvaluatePayload(String sessionId) {
+    }
 
     @Override
     protected String taskDisplayName() {
-        return "评估";
+        return "多维度评估";
     }
 
     @Override
     protected String streamKey() {
-        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_STREAM_KEY;
+        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY;
     }
 
     @Override
     protected String groupName() {
-        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_GROUP_NAME;
+        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_GROUP_NAME;
     }
 
     @Override
     protected String consumerPrefix() {
-        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_CONSUMER_PREFIX;
+        return AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_CONSUMER_PREFIX;
     }
 
     @Override
     protected String threadName() {
-        return "evaluate-consumer";
+        return "multipole-evaluate-consumer";
     }
 
     @Override
@@ -105,15 +105,15 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         String sessionId = payload.sessionId();
         Optional<InterviewSessionEntity> sessionOpt = sessionRepository.findBySessionIdWithResume(sessionId);
         if (sessionOpt.isEmpty()) {
-            log.warn("会话已被删除，跳过评估任务: sessionId={}", sessionId);
+            log.warn("会话已被删除，跳过多维度评估任务: sessionId={}", sessionId);
             return;
         }
 
         InterviewSessionEntity session = sessionOpt.get();
         List<InterviewQuestionDTO> questions = objectMapper.readValue(
-            session.getQuestionsJson(),
-            new TypeReference<>() {}
-        );
+                session.getQuestionsJson(),
+                new TypeReference<>() {
+                });
 
         List<InterviewAnswerEntity> answers = persistenceService.findAnswersBySessionId(sessionId);
         for (InterviewAnswerEntity answer : answers) {
@@ -124,13 +124,11 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
             }
         }
 
-        // 获取 LLM 客户端
         String provider = session.getLlmProvider();
         ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
         String resumeText = session.getResume() != null ? session.getResume().getResumeText() : "";
-        InterviewReportDTO report = evaluationService.evaluateInterview(chatClient, sessionId, resumeText, questions);
-        persistenceService.saveReport(sessionId, report);
+        interviewEvaluationService.evaluateSession(chatClient, session, resumeText, questions);
     }
 
     @Override
@@ -149,37 +147,31 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         String sessionId = payload.sessionId();
         try {
             Map<String, String> message = Map.of(
-                AsyncTaskStreamConstants.FIELD_SESSION_ID, sessionId,
-                AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
-            );
+                    AsyncTaskStreamConstants.FIELD_SESSION_ID, sessionId,
+                    AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount));
 
             redisService().streamAdd(
-                AsyncTaskStreamConstants.INTERVIEW_EVALUATE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
-            log.info("评估任务已重新入队: sessionId={}, retryCount={}", sessionId, retryCount);
+                    AsyncTaskStreamConstants.INTERVIEW_EVALUATE_MULTIPOLE_STREAM_KEY,
+                    message,
+                    AsyncTaskStreamConstants.STREAM_MAX_LEN);
+            log.info("多维度评估任务已重新入队: sessionId={}, retryCount={}", sessionId, retryCount);
 
         } catch (Exception e) {
-            log.error("重试入队失败: sessionId={}, error={}", sessionId, e.getMessage(), e);
-            updateEvaluateStatus(sessionId, AsyncTaskStatus.FAILED, truncateError("重试入队失败: " + e.getMessage()));
+            log.error("多维度评估重试入队失败: sessionId={}, error={}", sessionId, e.getMessage(), e);
+            updateEvaluateStatus(sessionId, AsyncTaskStatus.FAILED, truncateError("多维度评估重试入队失败: " + e.getMessage()));
         }
     }
 
-    /**
-     * 更新评估状态
-     */
     private void updateEvaluateStatus(String sessionId, AsyncTaskStatus status, String error) {
         try {
             sessionRepository.findBySessionId(sessionId).ifPresent(session -> {
-                session.setEvaluateStatus(status);
+                session.setMultipoleEvaluateStatus(status);
                 session.setEvaluateError(error);
                 sessionRepository.save(session);
-                log.debug("评估状态已更新: sessionId={}, status={}", sessionId, status);
+                log.debug("多维度评估状态已更新: sessionId={}, status={}", sessionId, status);
             });
         } catch (Exception e) {
-            log.error("更新评估状态失败: sessionId={}, status={}, error={}", sessionId, status, e.getMessage(), e);
+            log.error("多维度评估状态更新失败: sessionId={}, status={}, error={}", sessionId, status, e.getMessage(), e);
         }
     }
-
 }
