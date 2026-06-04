@@ -12,4 +12,6 @@ public interface VoiceEvaluationScoreRepository extends JpaRepository<VoiceEvalu
     List<VoiceEvaluationScoreEntity> findBySessionId(Long sessionId);
 
     void deleteBySessionId(Long sessionId);
+
+    List<VoiceEvaluationScoreEntity> findAllByOrderByCreatedAtAsc();
 }

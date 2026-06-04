@@ -126,7 +126,7 @@ public class VoiceInterviewProperties {
     public static class AsrConfig {
         private String url = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime";
         // private String model = "qwen3-asr-flash-realtime";
-        private String model = "fun-asr-realtime-2026-02-28";
+        private String model = "qwen3-asr-flash-realtime";
         private String apiKey;
         private String language = "zh";
         private String format = "pcm";
@@ -140,7 +140,7 @@ public class VoiceInterviewProperties {
     @Data
     public static class QwenTtsConfig {
         // private String model = "qwen3-tts-flash-realtime";
-        private String model = "cosyvoice-v1";
+        private String model = "qwen3-tts-flash-realtime";
         private String apiKey;
         private String voice = "Cherry";
         private String format = "pcm";

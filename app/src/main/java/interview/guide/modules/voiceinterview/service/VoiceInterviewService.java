@@ -623,6 +623,7 @@ public class VoiceInterviewService {
             throw new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND, "会话不存在: " + sessionId);
         }
         evaluationRepository.findBySessionId(sessionId).ifPresent(evaluationRepository::delete);
+        voiceEvaluationScoreRepository.deleteBySessionId(sessionId);
         messageRepository.deleteBySessionId(sessionId);
         sessionRepository.deleteById(sessionId);
         log.info("Deleted voice interview session: {}", sessionId);

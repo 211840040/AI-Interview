@@ -38,6 +38,7 @@ public class InterviewPersistenceService {
 
     private final InterviewSessionRepository sessionRepository;
     private final InterviewAnswerRepository answerRepository;
+    private final EvaluationScoreRepository evaluationScoreRepository;
     private final ResumeRepository resumeRepository;
     private final ObjectMapper objectMapper;
 
@@ -316,8 +317,12 @@ public class InterviewPersistenceService {
     public void deleteSessionBySessionId(String sessionId) {
         Optional<InterviewSessionEntity> sessionOpt = sessionRepository.findBySessionId(sessionId);
         if (sessionOpt.isPresent()) {
-            sessionRepository.delete(sessionOpt.get());
-            log.info("已删除面试会话: sessionId={}", sessionId);
+            InterviewSessionEntity session = sessionOpt.get();
+            // 先删除关联的评估分数记录
+            evaluationScoreRepository.deleteBySessionId(session.getId());
+            // 再删除会话
+            sessionRepository.delete(session);
+            log.info("已删除面试会话及其评估数据: sessionId={}", sessionId);
         } else {
             throw new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND);
         }

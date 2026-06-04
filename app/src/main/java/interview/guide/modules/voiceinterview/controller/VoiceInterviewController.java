@@ -16,6 +16,7 @@ import interview.guide.modules.voiceinterview.model.VoiceEvaluationScoreEntity;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewEvaluationService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import interview.guide.modules.voiceinterview.service.VoiceMultipoleEvaluationService;
+import interview.guide.modules.voiceinterview.repository.VoiceEvaluationScoreRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,7 @@ public class VoiceInterviewController {
     private final VoiceInterviewService voiceInterviewService;
     private final VoiceInterviewEvaluationService evaluationService;
     private final VoiceMultipoleEvaluationService voiceMultipoleEvaluationService;
+    private final VoiceEvaluationScoreRepository voiceEvaluationScoreRepository;
     private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
 
     /**
@@ -226,6 +228,32 @@ public class VoiceInterviewController {
     public Result<List<VoiceEvaluationScoreEntity>> getEvaluationDetails(@PathVariable Long sessionId) {
         log.info("获取语音面试多维度评估详情: sessionId={}", sessionId);
         List<VoiceEvaluationScoreEntity> scores = voiceMultipoleEvaluationService.getScoresBySessionId(sessionId);
+        return Result.success(scores);
+    }
+
+    /**
+     * 获取所有语音面试的多维度评估历史（用于趋势图）
+     */
+    @GetMapping("/evaluation-history")
+    public Result<List<VoiceEvaluationScoreEntity>> getEvaluationHistory(
+            @RequestParam(required = false) Long sessionId,
+            @RequestParam(required = false) String dimension) {
+        log.info("获取语音面试多维度评估历史");
+        List<VoiceEvaluationScoreEntity> scores;
+        if (sessionId != null && dimension != null) {
+            scores = voiceEvaluationScoreRepository.findBySessionId(sessionId).stream()
+                    .filter(s -> dimension.equals(s.getDimension()))
+                    .toList();
+        } else if (sessionId != null) {
+            scores = voiceEvaluationScoreRepository.findBySessionId(sessionId);
+        } else if (dimension != null) {
+            // Filter from all (no direct method, keep simple)
+            scores = voiceEvaluationScoreRepository.findAllByOrderByCreatedAtAsc().stream()
+                    .filter(s -> dimension.equals(s.getDimension()))
+                    .toList();
+        } else {
+            scores = voiceEvaluationScoreRepository.findAllByOrderByCreatedAtAsc();
+        }
         return Result.success(scores);
     }
 
