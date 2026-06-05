@@ -1,6 +1,7 @@
 package interview.guide.modules.resume;
 
 import interview.guide.common.annotation.RateLimit;
+import interview.guide.common.exception.BusinessException;
 import interview.guide.common.result.Result;
 import interview.guide.modules.resume.model.ResumeDetailDTO;
 import interview.guide.modules.resume.model.ResumeListItemDTO;
@@ -131,6 +132,31 @@ public class ResumeController {
             "status", "UP",
             "service", "AI Interview Platform - Resume Service"
         ));
+    }
+
+    /**
+     * 获取简历原文件（代理 RustFS 直链，避免浏览器直接访问 S3 时 403）
+     * 前端通过此接口内联预览 PDF
+     */
+    @GetMapping("/api/resumes/{id}/file")
+    public ResponseEntity<byte[]> getResumeFile(@PathVariable Long id) {
+        try {
+            byte[] fileBytes = historyService.downloadResumeFile(id);
+            String contentType = historyService.getResumeContentType(id);
+            String filename = URLEncoder.encode(
+                historyService.getResumeDetail(id).filename(), StandardCharsets.UTF_8);
+
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename*=UTF-8''" + filename)
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(fileBytes);
+        } catch (BusinessException e) {
+            log.error("获取简历文件失败: resumeId={}, error={}", id, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("获取简历文件异常: resumeId={}", id, e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
 }

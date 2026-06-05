@@ -51,7 +51,6 @@ function HistoryListWrapper() {
 function ResumeDetailWrapper() {
   const { resumeId } = useParams<{ resumeId: string }>();
   const navigate = useNavigate();
-  const { openInterviewModalWithResume } = useOutletContext<{ openInterviewModalWithResume: (resumeId: number) => void }>();
 
   if (!resumeId) {
     return <Navigate to="/history" replace />;
@@ -61,15 +60,10 @@ function ResumeDetailWrapper() {
     navigate('/history');
   };
 
-  const handleStartInterview = (id: number) => {
-    openInterviewModalWithResume(id);
-  };
-
   return (
     <ResumeDetailPage
       resumeId={parseInt(resumeId, 10)}
       onBack={handleBack}
-      onStartInterview={handleStartInterview}
     />
   );
 }

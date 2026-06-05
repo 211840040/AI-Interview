@@ -3,6 +3,7 @@ package interview.guide.modules.resume.service;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.infrastructure.export.PdfExportService;
+import interview.guide.infrastructure.file.FileStorageService;
 import interview.guide.infrastructure.mapper.InterviewMapper;
 import interview.guide.infrastructure.mapper.ResumeMapper;
 import interview.guide.modules.interview.model.InterviewHistoryItemDTO;
@@ -35,6 +36,7 @@ public class ResumeHistoryService {
     private final ResumePersistenceService resumePersistenceService;
     private final InterviewPersistenceService interviewPersistenceService;
     private final PdfExportService pdfExportService;
+    private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
     private final ResumeMapper resumeMapper;
     private final InterviewMapper interviewMapper;
@@ -105,6 +107,7 @@ public class ResumeHistoryService {
             resume.getFileSize(),
             resume.getContentType(),
             resume.getStorageUrl(),
+            resume.getStorageKey(),
             resume.getUploadedAt(),
             resume.getAccessCount(),
             resume.getResumeText(),
@@ -175,6 +178,28 @@ public class ResumeHistoryService {
             log.error("导出PDF失败: resumeId={}", resumeId, e);
             throw new BusinessException(ErrorCode.EXPORT_PDF_FAILED, "导出PDF失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 下载简历原文件（代理 S3/RustFS 直链，避免 CORS/403）
+     */
+    public byte[] downloadResumeFile(Long resumeId) {
+        ResumeEntity resume = resumePersistenceService.findById(resumeId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
+        String storageKey = resume.getStorageKey();
+        if (storageKey == null || storageKey.isBlank()) {
+            throw new BusinessException(ErrorCode.RESUME_NOT_FOUND, "简历文件已丢失");
+        }
+        return fileStorageService.downloadFile(storageKey);
+    }
+
+    /**
+     * 获取简历的 Content-Type
+     */
+    public String getResumeContentType(Long resumeId) {
+        ResumeEntity resume = resumePersistenceService.findById(resumeId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
+        return resume.getContentType();
     }
 
     /**
