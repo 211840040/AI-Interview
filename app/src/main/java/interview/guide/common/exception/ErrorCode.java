@@ -79,7 +79,14 @@ public enum ErrorCode {
     MODULE_NOT_FOUND(11008, "模块不存在"),
     VOICE_CONFIG_READ_FAILED(11009, "读取语音服务配置失败"),
     VOICE_CONFIG_WRITE_FAILED(11010, "写入语音服务配置失败"),
-    VOICE_CONFIG_TEST_FAILED(11011, "语音服务连通性测试失败");
+    VOICE_CONFIG_TEST_FAILED(11011, "语音服务连通性测试失败"),
+
+    // ========== 专项练习模块错误 12xxx ==========
+    EXERCISE_QUESTION_NOT_FOUND(12001, "练习题不存在"),
+    EXERCISE_SHEET_NOT_FOUND(12002, "题单不存在"),
+    EXERCISE_QUESTION_GENERATION_FAILED(12003, "问题 AI 生成失败"),
+    EXERCISE_INSUFFICIENT_QUESTIONS(12004, "题单问题数量不足"),
+    EXERCISE_POOL_EMPTY(12005, "问题缓存池为空");
 
     private final Integer code;
     private final String message;
