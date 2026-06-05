@@ -93,7 +93,8 @@ public class ResumeHistoryService {
         List<ResumeDetailDTO.AnalysisHistoryDTO> analysisHistory = resumeMapper.toAnalysisHistoryDTOList(
             analyses,
             this::extractStrengths,
-            this::extractSuggestions
+            this::extractSuggestions,
+            this::extractDimensionEvaluations
         );
 
         // 使用 InterviewMapper 转换面试历史
@@ -152,6 +153,24 @@ public class ResumeHistoryService {
             log.error("解析 suggestions JSON 失败", e);
         }
         return List.of();
+    }
+
+    /**
+     * 从 JSON 提取维度评价
+     */
+    private Object extractDimensionEvaluations(ResumeAnalysisEntity entity) {
+        try {
+            if (entity.getDimensionEvaluationsJson() != null) {
+                return objectMapper.readValue(
+                    entity.getDimensionEvaluationsJson(),
+                        new TypeReference<>() {
+                        }
+                );
+            }
+        } catch (JacksonException e) {
+            log.error("解析 dimensionEvaluations JSON 失败", e);
+        }
+        return null;
     }
 
     /**

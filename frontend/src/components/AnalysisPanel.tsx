@@ -148,19 +148,29 @@ export default function AnalysisPanel({
     return colors[category] || 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
   };
 
-  // Progress bar data
+  // Progress bar data with evaluation keys
   const barData = [
-    { label: '项目经验', score: projectScore, maxScore: 40, barColor: 'bg-purple-500', delay: 0.1 },
-    { label: '技能匹配', score: skillMatchScore, maxScore: 20, barColor: 'bg-blue-500', delay: 0.2 },
-    { label: '内容完整性', score: contentScore, maxScore: 15, barColor: 'bg-emerald-500', delay: 0.3 },
-    { label: '结构清晰度', score: structureScore, maxScore: 15, barColor: 'bg-cyan-500', delay: 0.4 },
-    { label: '表达专业性', score: expressionScore, maxScore: 10, barColor: 'bg-orange-500', delay: 0.5 },
+    { key: 'project', label: '项目经验', score: projectScore, maxScore: 40, barColor: 'bg-purple-500', delay: 0.1 },
+    { key: 'skillMatch', label: '技能匹配', score: skillMatchScore, maxScore: 20, barColor: 'bg-blue-500', delay: 0.2 },
+    { key: 'content', label: '内容完整性', score: contentScore, maxScore: 15, barColor: 'bg-emerald-500', delay: 0.3 },
+    { key: 'structure', label: '结构清晰度', score: structureScore, maxScore: 15, barColor: 'bg-cyan-500', delay: 0.4 },
+    { key: 'expression', label: '表达专业性', score: expressionScore, maxScore: 10, barColor: 'bg-orange-500', delay: 0.5 },
   ];
+
+  // Extract dimension evaluations
+  const dimEval = analysis?.scoreDetail?.dimensionEvaluations ?? analysis?.dimensionEvaluations ?? null;
+  const getEval = (base: string) => {
+    if (!dimEval) return null;
+    return {
+      evaluation: dimEval[`${base}Evaluation`] as string | undefined,
+      rationale: dimEval[`${base}Rationale`] as string | undefined,
+    };
+  };
 
   return (
     <div className="flex gap-6" style={{ height: 'calc(100vh - 180px)' }}>
-      {/* 左侧：核心评价 + 多维度评分 */}
-      <div className="flex-1 min-w-0 space-y-6 overflow-y-auto">
+      {/* 左侧：核心评价 + 多维度评分 — 55% 宽度 */}
+      <div className="flex-[5] min-w-0 space-y-6 overflow-y-auto">
         {/* 核心评价 — 圆圈进度条 + 总结 + 优势标签 */}
         <motion.div
           className="bg-white dark:bg-slate-800 rounded-2xl p-6"
@@ -214,48 +224,64 @@ export default function AnalysisPanel({
           </div>
         </motion.div>
 
-        {/* 多维度评分 — 南丁格尔玫瑰图 + 进度条列表 */}
+        {/* 多维度评分 — 旭日图 + 维度详情列表 */}
         <motion.div
           className="bg-white dark:bg-slate-800 rounded-2xl p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-6">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-4">
             <span className="font-semibold">多维度评分</span>
           </div>
-          <div className="flex flex-col items-center gap-4">
-            {/* 旭日图 — 居中放大 */}
-            <div className="w-[480px] h-[450px]">
-              <NightingaleRoseChart data={roseData} height={450} />
+          <div className="flex flex-col items-center gap-3">
+            {/* 旭日图 — 居中展示 */}
+            <div className="w-[720px] h-[340px]">
+              <NightingaleRoseChart data={roseData} height={340} />
             </div>
-            {/* 维度列表 — 显示在旭日图下方 */}
-            <div className="w-full max-w-[480px] space-y-3">
-              {barData.map((item) => (
-                <div key={item.label}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{item.label}</span>
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {item.score}/{item.maxScore}
-                    </span>
+            {/* 维度列表 — 全宽，字号增大 */}
+            <div className="w-full space-y-4">
+              {barData.map((item) => {
+                const evalInfo = getEval(item.key);
+                return (
+                  <div key={item.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.label}</span>
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        {item.score}/{item.maxScore}
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                      <motion.div
+                        className={`h-full ${item.barColor} rounded-full`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(item.score / item.maxScore) * 100}%` }}
+                        transition={{ duration: 0.8, delay: item.delay }}
+                      />
+                    </div>
+                    {/* 维度评价文字 */}
+                    {evalInfo?.evaluation && (
+                      <div className="mt-2">
+                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {evalInfo.evaluation}
+                        </p>
+                        {evalInfo?.rationale && (
+                          <p className="text-xs text-slate-400 dark:text-slate-400 mt-1 leading-relaxed">
+                            理由：{evalInfo.rationale}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                    <motion.div
-                      className={`h-full ${item.barColor} rounded-full`}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(item.score / item.maxScore) * 100}%` }}
-                      transition={{ duration: 0.8, delay: item.delay }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </motion.div>
       </div>
 
-      {/* 右侧：改进建议（独立滚动，与左侧等高） */}
-      <div className="w-[480px] shrink-0 self-stretch">
+      {/* 右侧：改进建议（独立滚动，与左侧等高） — 45% 宽度 */}
+      <div className="flex-[4] min-w-0 self-stretch">
         <motion.div
           className="bg-white dark:bg-slate-800 rounded-2xl flex flex-col"
           initial={{ opacity: 0, y: 20 }}
@@ -282,7 +308,7 @@ export default function AnalysisPanel({
                     <span className={`px-3 py-1 rounded-full text-sm font-semibold
                       ${key === 'high' ? 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300' :
                         key === 'medium' ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300' :
-                        'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'}`}
+                          'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'}`}
                     >
                       {label}优先级 ({items.length})
                     </span>
@@ -305,7 +331,7 @@ export default function AnalysisPanel({
                             {s.category || '其他'}
                           </span>
                         </div>
-                        <p className="font-semibold text-slate-900 dark:text-white mb-1">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5">
                           {s.issue || '问题描述'}
                         </p>
                         <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">

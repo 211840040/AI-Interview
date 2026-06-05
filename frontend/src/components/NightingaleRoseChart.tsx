@@ -32,7 +32,7 @@ const renderLabel = (props: any) => {
   if (!payload || !payload.isOuter) return null;
   if (payload.color === '#f1f5f9') return null;
 
-  const radius = 175;
+  const radius = 155;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 

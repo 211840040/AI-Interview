@@ -29,6 +29,20 @@ export interface ScoreDetail {
   skillMatchScore: number;   // 技能匹配度 (0-25)
   expressionScore: number;   // 表达专业性 (0-15)
   projectScore: number;      // 项目经验 (0-15)
+  dimensionEvaluations?: DimensionEvaluations;
+}
+
+export interface DimensionEvaluations {
+  contentEvaluation: string;
+  contentRationale: string;
+  structureEvaluation: string;
+  structureRationale: string;
+  skillMatchEvaluation: string;
+  skillMatchRationale: string;
+  expressionEvaluation: string;
+  expressionRationale: string;
+  projectEvaluation: string;
+  projectRationale: string;
 }
 
 export interface Suggestion {

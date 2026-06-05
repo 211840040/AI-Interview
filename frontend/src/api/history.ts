@@ -36,6 +36,7 @@ export interface AnalysisItem {
   analyzedAt: string;
   strengths: string[];
   suggestions: unknown[];
+  dimensionEvaluations?: Record<string, string> | null;
 }
 
 export interface InterviewItem {

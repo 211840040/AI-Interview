@@ -102,6 +102,11 @@ public class ResumePersistenceService {
             // JSON 字段需要手动序列化
             entity.setStrengthsJson(objectMapper.writeValueAsString(analysis.strengths()));
             entity.setSuggestionsJson(objectMapper.writeValueAsString(analysis.suggestions()));
+            if (analysis.scoreDetail().dimensionEvaluations() != null) {
+                entity.setDimensionEvaluationsJson(
+                    objectMapper.writeValueAsString(analysis.scoreDetail().dimensionEvaluations())
+                );
+            }
 
             ResumeAnalysisEntity saved = analysisRepository.save(entity);
             log.info("简历评测结果已保存: analysisId={}, resumeId={}, score={}",
@@ -158,10 +163,34 @@ public class ResumePersistenceService {
                     new TypeReference<>() {
                     }
             );
-            
+
+            // 还原维度评价
+            ResumeAnalysisResponse.ScoreDetail.DimensionEvaluation dimEval = null;
+            if (entity.getDimensionEvaluationsJson() != null) {
+                try {
+                    dimEval = objectMapper.readValue(
+                        entity.getDimensionEvaluationsJson(),
+                        ResumeAnalysisResponse.ScoreDetail.DimensionEvaluation.class
+                    );
+                } catch (Exception e) {
+                    log.warn("反序列化维度评价失败, 将使用空值: {}", e.getMessage());
+                }
+            }
+            var scoreDetail = resumeMapper.toScoreDetail(entity);
+            var finalScoreDetail = new ResumeAnalysisResponse.ScoreDetail(
+                scoreDetail.contentScore(),
+                scoreDetail.structureScore(),
+                scoreDetail.skillMatchScore(),
+                scoreDetail.expressionScore(),
+                scoreDetail.projectScore(),
+                dimEval != null ? dimEval : new ResumeAnalysisResponse.ScoreDetail.DimensionEvaluation(
+                    "", "", "", "", "", "", "", "", "", ""
+                )
+            );
+
             return new ResumeAnalysisResponse(
                 entity.getOverallScore(),
-                resumeMapper.toScoreDetail(entity),  // 使用MapStruct自动映射
+                finalScoreDetail,
                 entity.getSummary(),
                 strengths,
                 suggestions,

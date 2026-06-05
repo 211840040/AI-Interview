@@ -5,6 +5,7 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.result.Result;
 import interview.guide.modules.resume.model.ResumeDetailDTO;
 import interview.guide.modules.resume.model.ResumeListItemDTO;
+import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.resume.service.ResumeDeleteService;
 import interview.guide.modules.resume.service.ResumeHistoryService;
 import interview.guide.modules.resume.service.ResumeUploadService;
@@ -121,6 +122,21 @@ public class ResumeController {
     public Result<Void> reanalyze(@PathVariable Long id) {
         uploadService.reanalyze(id);
         return Result.success(null);
+    }
+
+    /**
+     * 重新评估简历（同步，立即返回结果）
+     * 直接调用 LLM 分析简历内容，适用于测试
+     *
+     * @param id 简历ID
+     * @return 简历分析结果，包含评分、建议和维度评价
+     */
+    @PostMapping("/api/resumes/{id}/re-evaluate")
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 3)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 2)
+    public Result<ResumeAnalysisResponse> reEvaluate(@PathVariable Long id) {
+        ResumeAnalysisResponse analysis = uploadService.reEvaluate(id);
+        return Result.success(analysis);
     }
 
     /**

@@ -8,12 +8,18 @@ import interview.guide.infrastructure.file.FileStorageService;
 import interview.guide.infrastructure.file.FileValidationService;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.resume.listener.AnalyzeStreamProducer;
+import interview.guide.modules.resume.model.ResumeAnalysisEntity;
 import interview.guide.modules.resume.model.ResumeEntity;
+import interview.guide.modules.resume.repository.ResumeAnalysisRepository;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +41,9 @@ public class ResumeUploadService {
     private final FileValidationService fileValidationService;
     private final AnalyzeStreamProducer analyzeStreamProducer;
     private final ResumeRepository resumeRepository;
+    private final ResumeGradingService resumeGradingService;
+    private final ResumeAnalysisRepository resumeAnalysisRepository;
+    private final ObjectMapper objectMapper;
 
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -196,5 +205,45 @@ public class ResumeUploadService {
         analyzeStreamProducer.sendAnalyzeTask(resumeId, resumeText);
 
         log.info("重新分析任务已发送: resumeId={}", resumeId);
+    }
+
+    /**
+     * 重新评估简历（同步，立即返回结果）
+     * 直接调用 LLM 分析简历内容并保存结果，用于测试
+     *
+     * @param resumeId 简历ID
+     * @return 分析结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ResumeAnalysisResponse reEvaluate(Long resumeId) {
+        ResumeEntity resume = resumeRepository.findById(resumeId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND, "简历不存在"));
+
+        log.info("开始同步重新评估简历: resumeId={}, filename={}", resumeId, resume.getOriginalFilename());
+
+        String resumeText = resume.getResumeText();
+        if (resumeText == null || resumeText.trim().isEmpty()) {
+            resumeText = parseService.downloadAndParseContent(resume.getStorageKey(), resume.getOriginalFilename());
+            if (resumeText == null || resumeText.trim().isEmpty()) {
+                throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "无法获取简历文本内容");
+            }
+            resume.setResumeText(resumeText);
+        }
+
+        // 同步调用 LLM
+        ResumeAnalysisResponse analysis = resumeGradingService.analyzeResume(resumeText);
+
+        // 保存分析结果
+        ResumeAnalysisEntity entity = persistenceService.saveAnalysis(resume, analysis);
+
+        // 更新简历状态
+        resume.setAnalyzeStatus(AsyncTaskStatus.COMPLETED);
+        resume.setAnalyzeError(null);
+        resumeRepository.save(resume);
+
+        log.info("同步重新评估完成: resumeId={}, score={}, analysisId={}",
+            resumeId, analysis.overallScore(), entity.getId());
+
+        return analysis;
     }
 }
