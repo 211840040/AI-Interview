@@ -9,6 +9,7 @@ import { exerciseApi } from '../api/exercise';
 import type { ExerciseSheetDetailDTO, SheetQuestionDTO } from '../types/exercise';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import { TagBadges } from '../utils/tags';
 
 export default function ExerciseSheetDetailPage() {
   const { sheetId } = useParams<{ sheetId: string }>();
@@ -171,9 +172,7 @@ export default function ExerciseSheetDetailPage() {
               <BookOpen className="w-5 h-5 text-primary-500" />
               {sheet.name}
             </h1>
-            {sheet.tags && (
-              <span className="text-xs text-slate-400 dark:text-slate-500">{sheet.tags}</span>
-            )}
+            <TagBadges tags={sheet.tags} className="mt-1" />
           </div>
         </div>
 
@@ -363,6 +362,7 @@ export default function ExerciseSheetDetailPage() {
                   placeholder:text-slate-400 focus:outline-none focus:ring-2
                   focus:ring-primary-500/50 focus:border-primary-400 transition-shadow"
               />
+              <TagBadges tags={editTags} className="mt-2" />
             </div>
           </div>
         }

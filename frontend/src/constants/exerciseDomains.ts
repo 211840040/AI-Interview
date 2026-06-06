@@ -20,6 +20,7 @@ export const EXERCISE_DOMAINS: ExerciseDomain[] = [
   { key: 'test-development', label: '测试开发', icon: '🧪' },
   { key: 'high-availability', label: '高可用架构', icon: '⚡' },
   { key: 'db-design', label: '数据库设计', icon: '📐' },
+  { key: 'ai-agent-dev', label: 'AI Agent 开发', icon: '🤖' },
 ];
 
 export const QUESTION_COUNTS = [3, 5, 10, 15];

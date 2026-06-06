@@ -10,6 +10,12 @@ import type {
 } from '../types/exercise';
 
 export const exerciseApi = {
+  async fetchNextQuestion(domain: string): Promise<ExerciseQuestionDTO> {
+    return request.get<ExerciseQuestionDTO>('/api/exercise/question/next', {
+      params: { domain },
+    });
+  },
+
   async fetchQuestions(domain: string, count: number = 5): Promise<ExerciseQuestionDTO[]> {
     return request.get<ExerciseQuestionDTO[]>('/api/exercise/questions', {
       params: { domain, count },
@@ -17,7 +23,7 @@ export const exerciseApi = {
   },
 
   async getAnswer(id: number): Promise<ExerciseQuestionDTO> {
-    return request.get<ExerciseQuestionDTO>(`/api/exercise/questions/${id}/answer`);
+    return request.get<ExerciseQuestionDTO>(`/api/exercise/question/${id}/answer`);
   },
 
   async generateQuestions(domain: string, count: number): Promise<void> {
@@ -25,7 +31,7 @@ export const exerciseApi = {
   },
 
   async favoriteQuestion(id: number, sheetId: number): Promise<void> {
-    return request.post<void>(`/api/exercise/questions/${id}/favorite`, null, {
+    return request.post<void>(`/api/exercise/question/${id}/favorite`, null, {
       params: { sheetId },
     });
   },
