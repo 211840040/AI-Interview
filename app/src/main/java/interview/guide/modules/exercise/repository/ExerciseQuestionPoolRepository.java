@@ -2,7 +2,6 @@ package interview.guide.modules.exercise.repository;
 
 import interview.guide.modules.exercise.model.ExerciseQuestionPoolEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -15,7 +14,19 @@ public interface ExerciseQuestionPoolRepository extends JpaRepository<ExerciseQu
 
   long countByDomain(String domain);
 
-  @Modifying
-  @Query("delete from ExerciseQuestionPoolEntity e where e.id in :ids")
-  void deleteByIdIn(List<Long> ids);
+  long countByDomainAndDoneCnt(String domain, int doneCnt);
+
+  @Query("select e from ExerciseQuestionPoolEntity e where e.domain = :domain and e.countdown = 0 and e.doneCnt = 0")
+  List<ExerciseQuestionPoolEntity> findNewQuestions(String domain);
+
+  @Query("select e from ExerciseQuestionPoolEntity e where e.domain = :domain and e.countdown = 0 and e.doneCnt > 0")
+  List<ExerciseQuestionPoolEntity> findReviewableQuestions(String domain);
+
+  @Query("select e from ExerciseQuestionPoolEntity e where e.domain = :domain order by e.doneCnt desc")
+  List<ExerciseQuestionPoolEntity> findTopDoneQuestions(String domain);
+
+  @Query("select e from ExerciseQuestionPoolEntity e where e.domain = :domain and e.countdown > 0")
+  List<ExerciseQuestionPoolEntity> findCoolingDownQuestions(String domain);
+
+  List<ExerciseQuestionPoolEntity> findByDomainAndDoneCntGreaterThan(String domain, int doneCnt);
 }

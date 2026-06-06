@@ -30,3 +30,31 @@
 - 问题生成在app\src\main\resources\prompts下创建prompt
 - 先完成后端流程与接口开发，并通过测试，后续再讨论前端页面设计
   
+### 题目缓存池具体设计
+
+使用数据库表作为缓存池，对外提供统一的api用于获取题目 GET /api/exercise/question/next?domain={domain}
+
+以下说明中，所有题目已通过domain进行筛选
+
+question有几个重要字段: done_cnt：完成次数，countdown：冷却计时
+
+## 缓存池使用过程
+
+- 当缓存池中无题目时，调用大模型生成INITIAL_QA_NUMS道题目，并将这些题的完成次数(done_cnt)标记为0
+- 当无done_cnt>0的题目时，从未完成的题目(done_cnt=0)中均匀抽取；否则有DONE_PROB的概率从done_cnt>0的题目中抽取，每道题被抽到的权重为done_cnt/sum(done_cnt)
+- 当done_cnt=0的题目数量小于等于SUPPLY_THRESHOLD时，后台调用大模型生成QA_PATCH_NUMS道题目补充到缓存池中，done_cnt均为0
+- 当一道题目被抽取后，done_cnt自增1，countdown设为3
+- countdown大于0的题目不可能被抽取(也不参与计算权重)，每当题目被抽取时，所有countdown>0的题目的countdown减一
+
+## 其他事项
+
+- 大模型生成的题目应当尽可能不与所有done_cnt=0的题目重复
+- 当该领域下的题目数量大于等于MAX_QA_NUMS时，删除done_cnt最大的MAX_QA_NUMS/2道题目
+
+## 参数设置
+
+- INITIAL_QA_NUMS: 8
+- DONE_PROB: 0.8
+- SUPPLY_THRESHOLD: 5
+- QA_PATCH_NUMS: 5
+- MAX_QA_NUMS: 50

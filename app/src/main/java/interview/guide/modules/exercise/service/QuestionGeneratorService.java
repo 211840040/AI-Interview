@@ -6,8 +6,7 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.exercise.dto.GeneratedQuestionDTO;
 import interview.guide.modules.exercise.dto.GeneratedQuestionsWrapper;
-import interview.guide.modules.exercise.model.ExerciseQuestionHistoryEntity;
-import interview.guide.modules.exercise.repository.ExerciseQuestionHistoryRepository;
+import interview.guide.modules.exercise.repository.ExerciseQuestionPoolRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -35,12 +34,12 @@ public class QuestionGeneratorService {
 
   private final LlmProviderRegistry llmProviderRegistry;
   private final StructuredOutputInvoker structuredOutputInvoker;
-  private final ExerciseQuestionHistoryRepository historyRepository;
+  private final ExerciseQuestionPoolRepository poolRepository;
   private final ResourceLoader resourceLoader;
 
   public List<GeneratedQuestionDTO> generateQuestions(String domain, int count) {
     String referenceContent = loadReferenceContent(domain);
-    String recentQuestions = loadRecentQuestions(domain);
+    String existingNewQuestions = loadExistingNewQuestions(domain);
 
     String systemPrompt = loadPrompt(SYSTEM_PROMPT_PATH);
     String userPromptTemplate = loadPrompt(USER_PROMPT_PATH);
@@ -49,7 +48,7 @@ public class QuestionGeneratorService {
     variables.put("domain", domain);
     variables.put("count", count);
     variables.put("referenceContent", referenceContent);
-    variables.put("recentQuestions", recentQuestions);
+    variables.put("recentQuestions", existingNewQuestions);
 
     String userPrompt = new PromptTemplate(userPromptTemplate).render(variables);
 
@@ -70,6 +69,16 @@ public class QuestionGeneratorService {
     return questions;
   }
 
+  private String loadExistingNewQuestions(String domain) {
+    var newQuestions = poolRepository.findNewQuestions(domain);
+    if (newQuestions.isEmpty()) {
+      return "无已有题目";
+    }
+    return newQuestions.stream()
+        .map(e -> "- " + e.getQuestion())
+        .collect(Collectors.joining("\n"));
+  }
+
   private String loadReferenceContent(String domain) {
     String path = REFERENCE_PATH_PREFIX + domain + ".md";
     try {
@@ -87,19 +96,6 @@ public class QuestionGeneratorService {
       log.warn("读取参考文档失败: {}", path, e);
       return "无参考文档";
     }
-  }
-
-  private String loadRecentQuestions(String domain) {
-    List<ExerciseQuestionHistoryEntity> recent =
-        historyRepository.findTop20ByDomainOrderByFetchedAtDesc(domain);
-
-    if (recent.isEmpty()) {
-      return "无近期题目";
-    }
-
-    return recent.stream()
-        .map(h -> "- " + h.getQuestion())
-        .collect(Collectors.joining("\n"));
   }
 
   private String loadPrompt(String path) {

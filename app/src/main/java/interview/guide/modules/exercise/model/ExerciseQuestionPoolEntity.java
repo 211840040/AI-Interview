@@ -34,11 +34,19 @@ public class ExerciseQuestionPoolEntity {
   @Column(name = "reference_answer", nullable = false, columnDefinition = "TEXT")
   private String referenceAnswer;
 
+  @Column(name = "done_cnt", nullable = false)
+  private Integer doneCnt;
+
+  @Column(nullable = false)
+  private Integer countdown;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 
   @jakarta.persistence.PrePersist
   protected void onCreate() {
     createdAt = LocalDateTime.now();
+    if (doneCnt == null) doneCnt = 0;
+    if (countdown == null) countdown = 0;
   }
 }

@@ -39,17 +39,15 @@ public class ExerciseController {
 
   // ==================== 专项练习 ====================
 
-  @GetMapping("/questions")
+  @GetMapping("/question/next")
   @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 10)
   @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
-  public Result<List<ExerciseQuestionDTO>> getQuestions(
-      @RequestParam String domain,
-      @RequestParam(defaultValue = "5") int count) {
-    log.info("获取练习题: domain={}, count={}", domain, count);
-    return Result.success(exerciseService.fetchQuestions(domain, count));
+  public Result<ExerciseQuestionDTO> nextQuestion(@RequestParam String domain) {
+    log.info("获取下一题: domain={}", domain);
+    return Result.success(exerciseService.nextQuestion(domain));
   }
 
-  @GetMapping("/questions/{id}/answer")
+  @GetMapping("/question/{id}/answer")
   public Result<ExerciseQuestionDTO> getAnswer(@PathVariable Long id) {
     return Result.success(exerciseService.getAnswer(id));
   }
@@ -65,7 +63,7 @@ public class ExerciseController {
 
   // ==================== 收藏 ====================
 
-  @PostMapping("/questions/{id}/favorite")
+  @PostMapping("/question/{id}/favorite")
   public Result<Void> favoriteQuestion(
       @PathVariable Long id,
       @RequestParam Long sheetId) {

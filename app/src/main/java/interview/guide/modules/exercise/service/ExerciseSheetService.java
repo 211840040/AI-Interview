@@ -9,10 +9,10 @@ import interview.guide.modules.exercise.dto.ExerciseSheetDTO;
 import interview.guide.modules.exercise.dto.ExerciseSheetDetailDTO;
 import interview.guide.modules.exercise.dto.SheetQuestionDTO;
 import interview.guide.modules.exercise.dto.UpdateSheetRequest;
-import interview.guide.modules.exercise.model.ExerciseQuestionHistoryEntity;
+import interview.guide.modules.exercise.model.ExerciseQuestionPoolEntity;
 import interview.guide.modules.exercise.model.ExerciseSheetEntity;
 import interview.guide.modules.exercise.model.ExerciseSheetQuestionEntity;
-import interview.guide.modules.exercise.repository.ExerciseQuestionHistoryRepository;
+import interview.guide.modules.exercise.repository.ExerciseQuestionPoolRepository;
 import interview.guide.modules.exercise.repository.ExerciseSheetQuestionRepository;
 import interview.guide.modules.exercise.repository.ExerciseSheetRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +31,7 @@ public class ExerciseSheetService {
 
   private final ExerciseSheetRepository sheetRepository;
   private final ExerciseSheetQuestionRepository sheetQuestionRepository;
-  private final ExerciseQuestionHistoryRepository historyRepository;
+  private final ExerciseQuestionPoolRepository poolRepository;
 
   @Transactional(readOnly = true)
   public List<ExerciseSheetDTO> listSheets() {
@@ -144,8 +144,8 @@ public class ExerciseSheetService {
   }
 
   @Transactional
-  public void favoriteQuestionToSheet(Long historyId, Long sheetId) {
-    ExerciseQuestionHistoryEntity history = historyRepository.findById(historyId)
+  public void favoriteQuestionToSheet(Long questionId, Long sheetId) {
+    ExerciseQuestionPoolEntity question = poolRepository.findById(questionId)
         .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_QUESTION_NOT_FOUND, "练习题不存在"));
 
     ExerciseSheetEntity sheet = sheetRepository.findById(sheetId)
@@ -155,13 +155,13 @@ public class ExerciseSheetService {
 
     ExerciseSheetQuestionEntity entity = ExerciseSheetQuestionEntity.builder()
         .sheet(sheet)
-        .question(history.getQuestion())
-        .referenceAnswer(history.getReferenceAnswer())
+        .question(question.getQuestion())
+        .referenceAnswer(question.getReferenceAnswer())
         .sortOrder((int) count)
         .build();
     sheetQuestionRepository.save(entity);
 
-    log.info("收藏问题到题单: historyId={}, sheetId={}", historyId, sheetId);
+    log.info("收藏问题到题单: questionId={}, sheetId={}", questionId, sheetId);
   }
 
   @Transactional(readOnly = true)
