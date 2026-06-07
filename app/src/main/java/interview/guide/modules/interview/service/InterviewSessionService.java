@@ -329,17 +329,18 @@ public class InterviewSessionService {
                     request.answer(), 0, null // 分数在报告生成时更新
             );
             persistenceService.updateCurrentQuestionIndex(request.sessionId(), newIndex);
-            persistenceService.updateSessionStatus(request.sessionId(),
-                    InterviewSessionEntity.SessionStatus.IN_PROGRESS);
 
-            // 如果是最后一题，设置会话为 EVALUATING 并触发异步评估
             if (!hasNextQuestion) {
+                // 最后一题：直接设为 EVALUATING，跳过 IN_PROGRESS，避免中间状态导致前端显示异常
                 persistenceService.updateSessionStatus(request.sessionId(),
                         InterviewSessionEntity.SessionStatus.EVALUATING);
                 persistenceService.updateEvaluateStatus(request.sessionId(), AsyncTaskStatus.PENDING, null);
                 evaluateStreamProducer.sendEvaluateTask(request.sessionId());
                 multipoleEvaluateStreamProducer.sendMultipoleTask(request.sessionId());
                 log.info("会话 {} 已完成所有问题，评估任务已入队", request.sessionId());
+            } else {
+                persistenceService.updateSessionStatus(request.sessionId(),
+                        InterviewSessionEntity.SessionStatus.IN_PROGRESS);
             }
         } catch (Exception e) {
             log.warn("保存答案到数据库失败: {}", e.getMessage());

@@ -637,7 +637,7 @@ export default function InterviewHubPage() {
       </div>
 
       {/* 开始面试按钮 — 固定底部 */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-700 z-20">
+      <div className="fixed bottom-0 left-64 right-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-700 z-20">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <motion.button
             onClick={handleStart}
@@ -650,7 +650,7 @@ export default function InterviewHubPage() {
               flex items-center justify-center gap-2"
           >
             <Sparkles className="w-5 h-5" />
-            开始{pickedMode === 'text' ? '文字' : '语音'}面试
+            开始面试
           </motion.button>
         </div>
       </div>

@@ -125,9 +125,9 @@ function InterviewWrapper() {
     navigate('/history', { replace: false });
   };
 
-  const handleInterviewComplete = () => {
-    // 面试完成后跳转到面试记录页
-    navigate('/interviews');
+  const handleInterviewComplete = (completedSessionId?: string) => {
+    // 面试完成后跳转到面试记录页，携带sessionId以便高亮显示
+    navigate('/interviews', { state: { completedSessionId } });
   };
 
   if (loading) {

@@ -20,14 +20,11 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
-  Download,
   FileText,
   Loader2,
   Mic,
   PlayCircle,
   RefreshCw,
-  RotateCcw,
-  Search,
   Sparkles,
   Trash2,
   Users,
@@ -72,7 +69,11 @@ function isEvaluateCompleted(item: UnifiedInterviewItem): boolean {
 }
 
 function isEvaluating(item: UnifiedInterviewItem): boolean {
-  return item.evaluateStatus === 'PENDING' || item.evaluateStatus === 'PROCESSING';
+  if (item.evaluateStatus === 'PENDING' || item.evaluateStatus === 'PROCESSING') return true;
+  // status EVALUATING means evaluation has been triggered but evaluateStatus might not be set yet
+  if (item.status === 'EVALUATING') return true;
+  if ((item.status === 'COMPLETED' || item.status === 'EVALUATED') && (item.evaluateStatus === null || item.evaluateStatus === undefined)) return true;
+  return false;
 }
 
 function isEvaluateFailed(item: UnifiedInterviewItem): boolean {
@@ -89,7 +90,7 @@ function StatusIcon({ item }: { item: UnifiedInterviewItem }) {
 
 function getStatusText(item: UnifiedInterviewItem): string {
   if (isEvaluateFailed(item)) return '评估失败';
-  if (isEvaluating(item)) return item.evaluateStatus === 'PROCESSING' ? '评估中' : '等待评估';
+  if (isEvaluating(item)) return item.status === 'EVALUATING' ? '评估中' : '等待评估';
   if (isEvaluateCompleted(item)) return '已完成';
   if (item.status === 'IN_PROGRESS') return '进行中';
   if (item.status === 'PAUSED') return '已暂停';
@@ -155,19 +156,17 @@ function itemsEqual(a: UnifiedInterviewItem[], b: UnifiedInterviewItem[]): boole
   return true;
 }
 
-export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview, onContinueInterview }: InterviewHistoryPageProps) {
+export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview: _onRestartInterview, onContinueInterview }: InterviewHistoryPageProps) {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
   const [stats, setStats] = useState<InterviewStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<InterviewType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [skillFilter, setSkillFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'time_desc' | 'time_asc' | 'score_desc' | 'score_asc'>('time_desc');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [deleteItem, setDeleteItem] = useState<UnifiedInterviewItem | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
   const pollingRef = useRef<number | null>(null);
   const skillsRef = useRef<SkillDTO[]>([]);
   const skillsLoadedRef = useRef(false);
@@ -377,26 +376,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     }
   };
 
-  const handleExport = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExporting(sessionId);
-    try {
-      const blob = await historyApi.exportInterviewPdf(sessionId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `面试报告_${sessionId.slice(-8)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch {
-      alert('导出失败，请重试');
-    } finally {
-      setExporting(null);
-    }
-  };
-
   /** 根据 refSessionId 精确查找对应的面试记录（用于图表悬浮详情） */
   function findSessionByRefId(refSessionId: string): UnifiedInterviewItem | null {
     if (!refSessionId) return null;
@@ -558,7 +537,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
   const filtered = useMemo(() => {
     let result = items.filter(item => {
       if (typeFilter !== 'all' && item.type !== typeFilter) return false;
-      if (searchTerm && !item.title.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      // search filter removed
       if (statusFilter === 'completed' && !isEvaluateCompleted(item)) return false;
       if (statusFilter === 'incomplete' && isEvaluateCompleted(item)) return false;
       if (skillFilter !== 'all' && item.title !== skillFilter) return false;
@@ -579,7 +558,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     });
 
     return result;
-  }, [items, typeFilter, searchTerm, statusFilter, skillFilter, sortBy]);
+  }, [items, typeFilter, statusFilter, skillFilter, sortBy]);
 
   return (
     <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -604,7 +583,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
           </motion.p>
         </div>
 
-        <motion.div
+        {/* <motion.div
           className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 min-w-[280px] focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100 dark:focus-within:ring-primary-900/30 transition-all"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -617,7 +596,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 bg-transparent"
           />
-        </motion.div>
+        </motion.div> */}
       </div>
 
       {/* 顶部：趋势折线图 + 总体信息 */}
@@ -937,7 +916,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {item.type === 'text' && !isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
+                        {item.type === 'text' && item.status === 'IN_PROGRESS' && !isEvaluating(item) && onContinueInterview && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onContinueInterview(String(item.sessionId)); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -946,36 +925,13 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             <PlayCircle className="w-4 h-4" />
                           </button>
                         )}
-                        {item.type === 'voice' && isLiveStatus(item.status) && item.voiceSessionId && (
+                        {item.type === 'voice' && isLiveStatus(item.status) && !isEvaluating(item) && item.voiceSessionId && (
                           <button
                             onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: Number(item.voiceSessionId) } }); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="继续面试"
                           >
                             <PlayCircle className="w-4 h-4" />
-                          </button>
-                        )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && (
-                          <button
-                            onClick={(e) => handleExport(String(item.sessionId), e)}
-                            disabled={exporting === item.sessionId}
-                            className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50"
-                            title="导出PDF"
-                          >
-                            {exporting === item.sessionId ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Download className="w-4 h-4" />
-                            )}
-                          </button>
-                        )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && item.resumeId && onRestartInterview && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onRestartInterview(item.resumeId!); }}
-                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-                            title="重新面试"
-                          >
-                            <RotateCcw className="w-4 h-4" />
                           </button>
                         )}
                         <button

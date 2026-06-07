@@ -312,38 +312,33 @@ export default function AudioRecorder({
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Volume Ripple Effect when recording */}
+      {/* Volume Ripple Effect */}
       {isRecording && (
         <div
-          className="absolute rounded-full border border-primary-500/50 pointer-events-none transition-all duration-75"
+          className="absolute rounded-xl border border-primary-500/40 pointer-events-none transition-all duration-75"
           style={{
-            width: `${100 + (volume / 255) * 100}%`,
-            height: `${100 + (volume / 255) * 100}%`,
+            width: `${100 + (volume / 255) * 40}%`,
+            height: '100%',
             opacity: Math.max(0, 1 - (volume / 255) * 1.5),
           }}
         />
       )}
 
-      {/* Record button */}
+      {/* Record button — rounded rectangle */}
       <button
         onClick={toggleRecording}
         disabled={disabled && !isRecording}
-        className={`
-          relative z-10 w-16 h-16 rounded-full flex items-center justify-center
-          transition-all duration-300 shadow-xl
-          ${disabled && !isRecording ? 'opacity-50 cursor-not-allowed shadow-none' : ''}
+        className={`relative z-10 px-5 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center gap-1.5
+          ${disabled && !isRecording ? 'opacity-50 cursor-not-allowed' : ''}
           ${isRecording
-            ? 'bg-primary-500 hover:bg-primary-600 shadow-primary-500/40'
-            : 'bg-slate-700 hover:bg-slate-600 shadow-slate-900/50'
+            ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-md shadow-primary-500/25'
+            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
           }
         `}
-        title={disabled && !isRecording ? '语音识别准备中' : isRecording ? '停止录音' : '开始说话'}
+        title={isRecording ? '停止录音' : '开始录音'}
       >
-        {isRecording ? (
-          <Mic className="w-7 h-7 text-white" />
-        ) : (
-          <MicOff className="w-7 h-7 text-slate-300" />
-        )}
+        {isRecording ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+        <span>{isRecording ? '停止' : '麦克风'}</span>
       </button>
     </div>
   );

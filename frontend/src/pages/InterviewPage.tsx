@@ -29,7 +29,7 @@ interface InterviewProps {
     jdText?: string;
   };
   onBack: () => void;
-  onInterviewComplete: () => void;
+  onInterviewComplete: (sessionId?: string) => void;
 }
 
 const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
@@ -220,7 +220,11 @@ export default function Interview({
           questionIndex: response.nextQuestion!.questionIndex
         }]);
       } else {
-        onInterviewComplete();
+        // Last question answered — complete session to trigger evaluation
+        await interviewApi.completeInterview(session.sessionId).catch(() => {});
+        // Wait for backend to register the evaluation status before navigating
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        onInterviewComplete(session.sessionId);
       }
     } catch (err) {
       setError('提交答案失败，请重试');
@@ -237,7 +241,9 @@ export default function Interview({
     try {
       await interviewApi.completeInterview(session.sessionId);
       setShowCompleteConfirm(false);
-      onInterviewComplete();
+      // Wait for backend to register the evaluation status before navigating
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      onInterviewComplete(session.sessionId);
     } catch (err) {
       setError('提前交卷失败，请重试');
       console.error(err);
