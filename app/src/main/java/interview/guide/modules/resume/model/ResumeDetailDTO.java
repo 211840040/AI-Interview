@@ -15,6 +15,7 @@ public record ResumeDetailDTO(
     Long fileSize,
     String contentType,
     String storageUrl,
+    String storageKey,
     LocalDateTime uploadedAt,
     Integer accessCount,
     String resumeText,
@@ -37,7 +38,8 @@ public record ResumeDetailDTO(
         String summary,
         LocalDateTime analyzedAt,
         List<String> strengths,
-        List<Object> suggestions
+        List<Object> suggestions,
+        Object dimensionEvaluations
     ) {}
 }
 

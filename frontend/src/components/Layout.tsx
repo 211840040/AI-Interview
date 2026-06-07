@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {ChevronRight, FileStack, Moon, Sparkles, Sun, Users} from 'lucide-react';
+import {BookOpen, ChevronRight, FileStack, Moon, Sparkles, Sun, Users} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -90,6 +90,13 @@ export default function Layout() {
         { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '查看面试历史' },
       ],
     },
+    {
+      id: 'exercise',
+      title: '专项练习',
+      items: [
+        { id: 'exercise-hub', path: '/exercise-hub', label: '专项练习', icon: BookOpen, description: '八股知识点刷题' },
+      ],
+    },
   ];
 
   // 判断当前页面是否匹配导航项
@@ -106,6 +113,10 @@ export default function Layout() {
         || currentPath === '/interview'
         || currentPath.startsWith('/interview/')
         || currentPath.startsWith('/voice-interview');
+    }
+    if (path === '/exercise-hub') {
+      return currentPath === '/exercise-hub'
+        || currentPath.startsWith('/exercise/');
     }
     return currentPath.startsWith(path);
   };

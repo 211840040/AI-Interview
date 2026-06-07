@@ -42,7 +42,11 @@ public class ResumeAnalysisEntity {
     // 改进建议列表 (JSON格式)
     @Column(columnDefinition = "TEXT")
     private String suggestionsJson;
-    
+
+    // 各维度评价与理由 (JSON格式)
+    @Column(name = "dimension_evaluations", columnDefinition = "TEXT")
+    private String dimensionEvaluationsJson;
+
     // 评测时间
     @Column(nullable = false)
     private LocalDateTime analyzedAt;
@@ -136,9 +140,17 @@ public class ResumeAnalysisEntity {
     public String getSuggestionsJson() {
         return suggestionsJson;
     }
-    
+
     public void setSuggestionsJson(String suggestionsJson) {
         this.suggestionsJson = suggestionsJson;
+    }
+
+    public String getDimensionEvaluationsJson() {
+        return dimensionEvaluationsJson;
+    }
+
+    public void setDimensionEvaluationsJson(String dimensionEvaluationsJson) {
+        this.dimensionEvaluationsJson = dimensionEvaluationsJson;
     }
     
     public LocalDateTime getAnalyzedAt() {

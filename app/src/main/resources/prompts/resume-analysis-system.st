@@ -38,6 +38,17 @@ JSON 结构必须严格包含以下字段：
    - contentScore: 内容完整性评分（0-15）
    - structureScore: 结构清晰度评分（0-15）
    - expressionScore: 表达专业性评分（0-10）
+   - dimensionEvaluations: 一个对象，包含各维度的评价(evaluation)和理由(rationale)，每个字段为字符串：
+       contentEvaluation: 内容完整性评价
+       contentRationale: 内容完整性评分的理由
+       structureEvaluation: 结构清晰度评价
+       structureRationale: 结构清晰度评分的理由
+       skillMatchEvaluation: 技能匹配度评价
+       skillMatchRationale: 技能匹配度评分的理由
+       expressionEvaluation: 表达专业性评价
+       expressionRationale: 表达专业性评分的理由
+       projectEvaluation: 项目经验评价
+       projectRationale: 项目经验评分的理由
 3. summary: 字符串，一句话总结简历的整体情况。
 4. strengths: 字符串数组，列出简历的优势点。
 5. suggestions: 对象数组，每个对象包含以下字段：

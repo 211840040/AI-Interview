@@ -16,6 +16,9 @@ const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewHubPage = lazy(() => import('./pages/InterviewHubPage'));
 const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPanel'));
+const ExerciseHubPage = lazy(() => import('./pages/ExerciseHubPage'));
+const ExercisePracticePage = lazy(() => import('./pages/ExercisePracticePage'));
+const ExerciseSheetDetailPage = lazy(() => import('./pages/ExerciseSheetDetailPage'));
 
 // Loading component
 const Loading = () => (
@@ -51,7 +54,6 @@ function HistoryListWrapper() {
 function ResumeDetailWrapper() {
   const { resumeId } = useParams<{ resumeId: string }>();
   const navigate = useNavigate();
-  const { openInterviewModalWithResume } = useOutletContext<{ openInterviewModalWithResume: (resumeId: number) => void }>();
 
   if (!resumeId) {
     return <Navigate to="/history" replace />;
@@ -61,15 +63,10 @@ function ResumeDetailWrapper() {
     navigate('/history');
   };
 
-  const handleStartInterview = (id: number) => {
-    openInterviewModalWithResume(id);
-  };
-
   return (
     <ResumeDetailPage
       resumeId={parseInt(resumeId, 10)}
       onBack={handleBack}
-      onStartInterview={handleStartInterview}
     />
   );
 }
@@ -194,6 +191,15 @@ function App() {
 
             {/* 语音面试评估报告 */}
             <Route path="voice-interview/:sessionId/evaluation" element={<VoiceInterviewEvaluationPage />} />
+
+            {/* 专项练习中心 */}
+            <Route path="exercise-hub" element={<ExerciseHubPage />} />
+
+            {/* 专项练习答题 */}
+            <Route path="exercise/practice" element={<ExercisePracticePage />} />
+
+            {/* 题单详情 */}
+            <Route path="exercise/sheets/:sheetId" element={<ExerciseSheetDetailPage />} />
           </Route>
 
         </Routes>

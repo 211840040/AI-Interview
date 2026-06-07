@@ -33,9 +33,29 @@ public record ResumeAnalysisResponse(
         int structureScore,     // 结构清晰度 (0-20)
         int skillMatchScore,    // 技能匹配度 (0-25)
         int expressionScore,    // 表达专业性 (0-15)
-        int projectScore        // 项目经验 (0-15)
-    ) {}
-    
+        int projectScore,       // 项目经验 (0-15)
+
+        /** 各维度评价与理由 */
+        DimensionEvaluation dimensionEvaluations
+    ) {
+
+        /**
+         * 单维度评价
+         */
+        public record DimensionEvaluation(
+            String contentEvaluation,
+            String contentRationale,
+            String structureEvaluation,
+            String structureRationale,
+            String skillMatchEvaluation,
+            String skillMatchRationale,
+            String expressionEvaluation,
+            String expressionRationale,
+            String projectEvaluation,
+            String projectRationale
+        ) {}
+    }
+
     /**
      * 改进建议
      */

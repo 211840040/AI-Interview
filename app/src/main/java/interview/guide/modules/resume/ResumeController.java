@@ -1,9 +1,11 @@
 package interview.guide.modules.resume;
 
 import interview.guide.common.annotation.RateLimit;
+import interview.guide.common.exception.BusinessException;
 import interview.guide.common.result.Result;
 import interview.guide.modules.resume.model.ResumeDetailDTO;
 import interview.guide.modules.resume.model.ResumeListItemDTO;
+import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.resume.service.ResumeDeleteService;
 import interview.guide.modules.resume.service.ResumeHistoryService;
 import interview.guide.modules.resume.service.ResumeUploadService;
@@ -123,6 +125,21 @@ public class ResumeController {
     }
 
     /**
+     * 重新评估简历（同步，立即返回结果）
+     * 直接调用 LLM 分析简历内容，适用于测试
+     *
+     * @param id 简历ID
+     * @return 简历分析结果，包含评分、建议和维度评价
+     */
+    @PostMapping("/api/resumes/{id}/re-evaluate")
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 3)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 2)
+    public Result<ResumeAnalysisResponse> reEvaluate(@PathVariable Long id) {
+        ResumeAnalysisResponse analysis = uploadService.reEvaluate(id);
+        return Result.success(analysis);
+    }
+
+    /**
      * 健康检查接口
      */
     @GetMapping("/api/resumes/health")
@@ -131,6 +148,31 @@ public class ResumeController {
             "status", "UP",
             "service", "AI Interview Platform - Resume Service"
         ));
+    }
+
+    /**
+     * 获取简历原文件（代理 RustFS 直链，避免浏览器直接访问 S3 时 403）
+     * 前端通过此接口内联预览 PDF
+     */
+    @GetMapping("/api/resumes/{id}/file")
+    public ResponseEntity<byte[]> getResumeFile(@PathVariable Long id) {
+        try {
+            byte[] fileBytes = historyService.downloadResumeFile(id);
+            String contentType = historyService.getResumeContentType(id);
+            String filename = URLEncoder.encode(
+                historyService.getResumeDetail(id).filename(), StandardCharsets.UTF_8);
+
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename*=UTF-8''" + filename)
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(fileBytes);
+        } catch (BusinessException e) {
+            log.error("获取简历文件失败: resumeId={}, error={}", id, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("获取简历文件异常: resumeId={}", id, e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
 }

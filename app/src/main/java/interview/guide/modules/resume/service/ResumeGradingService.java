@@ -44,15 +44,29 @@ public class ResumeGradingService {
         List<String> strengths,
         List<SuggestionDTO> suggestions
     ) {}
-    
+
     private record ScoreDetailDTO(
         int contentScore,
         int structureScore,
         int skillMatchScore,
         int expressionScore,
-        int projectScore
+        int projectScore,
+        DimensionEvaluationDTO dimensionEvaluations
     ) {}
-    
+
+    private record DimensionEvaluationDTO(
+        String contentEvaluation,
+        String contentRationale,
+        String structureEvaluation,
+        String structureRationale,
+        String skillMatchEvaluation,
+        String skillMatchRationale,
+        String expressionEvaluation,
+        String expressionRationale,
+        String projectEvaluation,
+        String projectRationale
+    ) {}
+
     private record SuggestionDTO(
         String category,
         String priority,
@@ -135,12 +149,25 @@ public class ResumeGradingService {
      * 转换DTO为业务对象
      */
     private ResumeAnalysisResponse convertToResponse(ResumeAnalysisResponseDTO dto, String originalText) {
+        var dim = dto.scoreDetail().dimensionEvaluations();
         ScoreDetail scoreDetail = new ScoreDetail(
             dto.scoreDetail().contentScore(),
             dto.scoreDetail().structureScore(),
             dto.scoreDetail().skillMatchScore(),
             dto.scoreDetail().expressionScore(),
-            dto.scoreDetail().projectScore()
+            dto.scoreDetail().projectScore(),
+            new ScoreDetail.DimensionEvaluation(
+                dim != null ? dim.contentEvaluation() : "",
+                dim != null ? dim.contentRationale() : "",
+                dim != null ? dim.structureEvaluation() : "",
+                dim != null ? dim.structureRationale() : "",
+                dim != null ? dim.skillMatchEvaluation() : "",
+                dim != null ? dim.skillMatchRationale() : "",
+                dim != null ? dim.expressionEvaluation() : "",
+                dim != null ? dim.expressionRationale() : "",
+                dim != null ? dim.projectEvaluation() : "",
+                dim != null ? dim.projectRationale() : ""
+            )
         );
         
         List<Suggestion> suggestions = dto.suggestions().stream()
@@ -161,9 +188,10 @@ public class ResumeGradingService {
      * 创建错误响应
      */
     private ResumeAnalysisResponse createErrorResponse(String originalText, String errorMessage) {
+        var emptyDim = new ScoreDetail.DimensionEvaluation("", "", "", "", "", "", "", "", "", "");
         return new ResumeAnalysisResponse(
             0,
-            new ScoreDetail(0, 0, 0, 0, 0),
+            new ScoreDetail(0, 0, 0, 0, 0, emptyDim),
             "分析过程中出现错误: " + errorMessage,
             List.of(),
             List.of(new Suggestion(

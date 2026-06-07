@@ -81,14 +81,16 @@ public interface ResumeMapper {
 
     /**
      * ResumeAnalysisEntity 转换为 AnalysisHistoryDTO
-     * 注意：strengths 和 suggestions 需要在 Service 层从 JSON 解析后传入
+     * 注意：strengths/suggestions/dimensionEvaluations 需要在 Service 层从 JSON 解析后传入
      */
     @Mapping(target = "strengths", source = "strengths")
     @Mapping(target = "suggestions", source = "suggestions")
+    @Mapping(target = "dimensionEvaluations", source = "dimensionEvaluations")
     ResumeDetailDTO.AnalysisHistoryDTO toAnalysisHistoryDTO(
         ResumeAnalysisEntity entity,
         List<String> strengths,
-        List<Object> suggestions
+        List<Object> suggestions,
+        Object dimensionEvaluations
     );
 
     /**
@@ -97,10 +99,16 @@ public interface ResumeMapper {
     default List<ResumeDetailDTO.AnalysisHistoryDTO> toAnalysisHistoryDTOList(
         List<ResumeAnalysisEntity> entities,
         Function<ResumeAnalysisEntity, List<String>> strengthsExtractor,
-        Function<ResumeAnalysisEntity, List<Object>> suggestionsExtractor
+        Function<ResumeAnalysisEntity, List<Object>> suggestionsExtractor,
+        Function<ResumeAnalysisEntity, Object> dimensionEvaluationsExtractor
     ) {
         return entities.stream()
-            .map(e -> toAnalysisHistoryDTO(e, strengthsExtractor.apply(e), suggestionsExtractor.apply(e)))
+            .map(e -> toAnalysisHistoryDTO(
+                e,
+                strengthsExtractor.apply(e),
+                suggestionsExtractor.apply(e),
+                dimensionEvaluationsExtractor.apply(e)
+            ))
             .toList();
     }
 
