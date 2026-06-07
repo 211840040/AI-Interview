@@ -72,7 +72,8 @@ public class ResumeHistoryService {
                 lastAnalyzedAt,
                 interviewCount,
                 resume.getAnalyzeStatus(),
-                resume.getAnalyzeError()
+                resume.getAnalyzeError(),
+                resume.getStorageUrl()
             );
         }).toList();
     }
