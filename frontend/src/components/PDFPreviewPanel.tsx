@@ -56,7 +56,8 @@ export default function PDFPreviewPanel({ resumeId, filename, isOpen, onClose }:
           animate={{ x: 0 }}
           exit={{ x: '-100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 250 }}
-          className="fixed top-0 left-[256px] h-full w-[720px] max-w-[calc(100vw-256px)] z-40 bg-white dark:bg-slate-800 shadow-2xl flex flex-col border-r border-slate-200 dark:border-slate-700"
+          className="fixed top-16 left-0 h-[calc(100vh-64px)] w-[720px] max-w-full z-40 bg-white dark:bg-slate-800 shadow-2xl flex flex-col border-r border-slate-200 dark:border-slate-700"
+
         >
           {/* 面板头部 */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">

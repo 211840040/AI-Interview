@@ -171,7 +171,7 @@ export default function ResumeDetailPage({ resumeId, onBack }: ResumeDetailPageP
       {resume.storageUrl && !pdfPanelOpen && (
         <motion.button
           onClick={() => setPdfPanelOpen(true)}
-          className="fixed left-64 top-1/2 -translate-y-1/2 z-50 w-7 h-14 bg-white dark:bg-slate-800 border border-l-0 border-slate-200 dark:border-slate-700 rounded-r-md flex items-center justify-center text-slate-400 hover:text-primary-500 transition-colors shadow-sm"
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 w-7 h-14 bg-white dark:bg-slate-800 border border-l-0 border-slate-200 dark:border-slate-700 rounded-r-md flex items-center justify-center text-slate-400 hover:text-primary-500 transition-colors shadow-sm"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           title="预览简历"
