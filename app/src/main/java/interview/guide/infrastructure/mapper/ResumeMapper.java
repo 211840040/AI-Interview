@@ -54,6 +54,7 @@ public interface ResumeMapper {
             lastAnalyzedAt,
             interviewCount,
             null,
+            null,
             null
         );
     }
@@ -65,6 +66,7 @@ public interface ResumeMapper {
     @Mapping(target = "latestScore", ignore = true)
     @Mapping(target = "lastAnalyzedAt", ignore = true)
     @Mapping(target = "interviewCount", ignore = true)
+    @Mapping(target = "storageUrl", source = "storageUrl")
     ResumeListItemDTO toListItemDTOBasic(ResumeEntity entity);
 
     // ========== ResumeDetailDTO 映射 ==========
