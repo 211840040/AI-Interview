@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, CheckCircle, Clock, Download, Eye, FileStack, RefreshCw, Upload } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertCircle, CheckCircle, Clock, Download, Eye, FileStack, RefreshCw, Upload, X } from 'lucide-react';
 import { historyApi, ResumeListItem } from '../api/history';
+import { resumeApi } from '../api/resume';
+import { getErrorMessage } from '../api/request';
+import FileUploadCard from '../components/FileUploadCard';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import PDFPreviewPanel from '../components/PDFPreviewPanel';
 import { formatDateOnly } from '../utils/date';
 import { getScoreProgressColor } from '../utils/score';
-import { ROUTES } from '../constants/routes';
 
 interface HistoryListProps {
   onSelectResume: (id: number) => void;
@@ -82,8 +83,10 @@ function ActionButton({ title, label, onClick, icon, disabled, hoverClass }: Act
 }
 
 export default function HistoryList({ onSelectResume }: HistoryListProps) {
-  const navigate = useNavigate();
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -108,6 +111,23 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
   useEffect(() => {
     loadResumes();
   }, [loadResumes]);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    setUploadError('');
+    try {
+      const data = await resumeApi.uploadAndAnalyze(file);
+      if (!data.storage || !data.storage.resumeId) {
+        throw new Error('上传失败，请重试');
+      }
+      setShowUploadModal(false);
+      await loadResumes();
+    } catch (err) {
+      setUploadError(getErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // 轮询：有分析中的简历时启动 3s 轮询
   const hasAnalyzing = resumes.some(r => isAnalyzing(r.analyzeStatus));
@@ -185,8 +205,16 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
         </div>
       </div>
 
+
       {/* 搜索栏 + 上传按钮 */}
       <div className="mb-6 flex items-center gap-3">
+        <button
+          onClick={() => setShowUploadModal(true)}
+          className="flex items-center gap-2 px-4 py-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors whitespace-nowrap"
+        >
+          <Upload className="w-4 h-4" />
+          上传简历
+        </button>
         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 flex-1 max-w-md focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100 transition-all">
           <svg className="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" />
@@ -200,13 +228,6 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
             className="flex-1 outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 bg-transparent"
           />
         </div>
-        <button
-          onClick={() => navigate(ROUTES.resumeUpload)}
-          className="flex items-center gap-2 px-4 py-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors whitespace-nowrap"
-        >
-          <Upload className="w-4 h-4" />
-          上传简历
-        </button>
       </div>
 
       {/* 加载状态 */}
@@ -246,9 +267,9 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-600">
                 <th className="w-[30%] text-left px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">简历名称</th>
-                <th className="w-[17.5%] text-left px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">上传日期</th>
                 <th className="w-[17.5%] text-left px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">分析状态</th>
                 <th className="w-[20%] text-left px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">AI 评分</th>
+                <th className="w-[17.5%] text-left px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">上传日期</th>
                 <th className="w-[12%] px-4 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   <div className="flex justify-end gap-1 pr-[84px]">操作</div>
                 </th>
@@ -280,7 +301,6 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
                         <span className="font-medium text-slate-800 dark:text-white">{resume.filename}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-5 text-slate-500 dark:text-slate-400">{formatDateOnly(resume.uploadedAt)}</td>
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-2">
                         <AnalyzeStatusIcon status={resume.analyzeStatus} />
@@ -312,6 +332,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
                         <span className="text-slate-400 dark:text-slate-500">-</span>
                       )}
                     </td>
+                    <td className="px-6 py-5 text-slate-500 dark:text-slate-400">{formatDateOnly(resume.uploadedAt)}</td>
                     <td className="px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <ActionButton
@@ -366,6 +387,48 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
         isOpen={previewResume !== null}
         onClose={() => setPreviewResume(null)}
       />
+
+      {/* 上传简历浮层 */}
+      <AnimatePresence>
+        {showUploadModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { if (!uploading) setShowUploadModal(false); }}
+          >
+            <motion.div
+              className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => { if (!uploading) setShowUploadModal(false); }}
+                className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="p-6">
+                <FileUploadCard
+                  title="上传简历"
+                  subtitle="支持 PDF、Word 格式，AI 将自动分析简历内容"
+                  accept=".pdf,.doc,.docx,.txt"
+                  formatHint="支持 PDF, DOCX, TXT"
+                  maxSizeHint="最大 10MB"
+                  uploading={uploading}
+                  uploadButtonText={uploading ? '上传中...' : '开始上传'}
+                  selectButtonText="选择简历文件"
+                  error={uploadError}
+                  onUpload={handleUpload}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 删除确认对话框 */}
       <DeleteConfirmDialog

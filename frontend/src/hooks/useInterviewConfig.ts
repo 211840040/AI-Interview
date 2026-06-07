@@ -14,6 +14,8 @@ export const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: strin
 
 export const CUSTOM_SKILL_ID = 'custom';
 export const DEFAULT_SKILL_ID = 'java-backend';
+export const DEFAULT_QUESTION_COUNT = 6;
+export const DEFAULT_PLANNED_DURATION = 30;
 export const DEFAULT_LLM_PROVIDER = '';
 export const MIN_JD_LENGTH = 50;
 
@@ -59,6 +61,7 @@ export function useInterviewConfig(options?: {
   const [parsedCustomJdText, setParsedCustomJdText] = useState('');
   const [customCategories, setCustomCategories] = useState<CategoryDTO[]>([]);
   const [parsingJd, setParsingJd] = useState(false);
+
 
   const isCustomSkill = skillId === CUSTOM_SKILL_ID;
   const jdNeedsReparse = parsedCustomJdText.length > 0 && customJdText !== parsedCustomJdText;
@@ -107,7 +110,6 @@ export function useInterviewConfig(options?: {
 
   useEffect(() => {
     if (autoLoad) {
-      setMode(defaultMode);
       if (defaultResumeId != null) {
         setResumeId(defaultResumeId);
         setShowMore(true);
@@ -116,7 +118,7 @@ export function useInterviewConfig(options?: {
       loadResumes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad, defaultMode, defaultResumeId]);
+  }, [autoLoad, defaultResumeId]);
 
   return {
     // State
