@@ -1,18 +1,18 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {useNavigate} from 'react-router-dom';
-import {AnimatePresence, motion} from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import {historyApi} from '../api/history';
-import {interviewApi, type TextSessionMeta} from '../api/interview';
-import {voiceInterviewApi, type SessionMeta} from '../api/voiceInterview';
-import {evaluationApi, type TrendGroup} from '../api/evaluation';
-import {formatDate} from '../utils/date';
-import {getScoreProgressColor} from '../utils/score';
-import {skillApi, type SkillDTO} from '../api/skill';
-import {getTemplateName} from '../utils/voiceInterview';
+import { historyApi } from '../api/history';
+import { interviewApi, type TextSessionMeta } from '../api/interview';
+import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
+import { evaluationApi, type TrendGroup } from '../api/evaluation';
+import { formatDate } from '../utils/date';
+import { getScoreProgressColor } from '../utils/score';
+import { skillApi, type SkillDTO } from '../api/skill';
+import { getTemplateName } from '../utils/voiceInterview';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import {
   AlertCircle,
@@ -20,14 +20,11 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
-  Download,
   FileText,
   Loader2,
   Mic,
   PlayCircle,
   RefreshCw,
-  RotateCcw,
-  Search,
   Sparkles,
   Trash2,
   Users,
@@ -54,7 +51,7 @@ interface UnifiedInterviewItem {
 interface InterviewStats {
   totalCount: number;
   completedCount: number;
-  averageScore: number;
+  averageScore: number | null;
 }
 
 function isCompletedStatus(status: string): boolean {
@@ -72,7 +69,11 @@ function isEvaluateCompleted(item: UnifiedInterviewItem): boolean {
 }
 
 function isEvaluating(item: UnifiedInterviewItem): boolean {
-  return item.evaluateStatus === 'PENDING' || item.evaluateStatus === 'PROCESSING';
+  if (item.evaluateStatus === 'PENDING' || item.evaluateStatus === 'PROCESSING') return true;
+  // status EVALUATING means evaluation has been triggered but evaluateStatus might not be set yet
+  if (item.status === 'EVALUATING') return true;
+  if ((item.status === 'COMPLETED' || item.status === 'EVALUATED') && (item.evaluateStatus === null || item.evaluateStatus === undefined)) return true;
+  return false;
 }
 
 function isEvaluateFailed(item: UnifiedInterviewItem): boolean {
@@ -80,16 +81,16 @@ function isEvaluateFailed(item: UnifiedInterviewItem): boolean {
 }
 
 function StatusIcon({ item }: { item: UnifiedInterviewItem }) {
-  if (isEvaluateFailed(item)) return <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400"/>;
-  if (isEvaluating(item)) return <RefreshCw className="w-4 h-4 text-blue-500 dark:text-blue-400 animate-spin"/>;
-  if (isEvaluateCompleted(item)) return <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400"/>;
-  if (item.status === 'IN_PROGRESS') return <PlayCircle className="w-4 h-4 text-blue-500 dark:text-blue-400"/>;
-  return <Clock className="w-4 h-4 text-yellow-500 dark:text-yellow-400"/>;
+  if (isEvaluateFailed(item)) return <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400" />;
+  if (isEvaluating(item)) return <RefreshCw className="w-4 h-4 text-blue-500 dark:text-blue-400 animate-spin" />;
+  if (isEvaluateCompleted(item)) return <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400" />;
+  if (item.status === 'IN_PROGRESS') return <PlayCircle className="w-4 h-4 text-blue-500 dark:text-blue-400" />;
+  return <Clock className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />;
 }
 
 function getStatusText(item: UnifiedInterviewItem): string {
   if (isEvaluateFailed(item)) return '评估失败';
-  if (isEvaluating(item)) return item.evaluateStatus === 'PROCESSING' ? '评估中' : '等待评估';
+  if (isEvaluating(item)) return item.status === 'EVALUATING' ? '评估中' : '等待评估';
   if (isEvaluateCompleted(item)) return '已完成';
   if (item.status === 'IN_PROGRESS') return '进行中';
   if (item.status === 'PAUSED') return '已暂停';
@@ -117,6 +118,7 @@ const DIMENSION_LABELS: Record<string, string> = {
   'Project Storytelling': '项目叙述',
 };
 
+const DIMENSION_KEYS = ['Communication', 'Technical Knowledge', 'Problem Solving', 'Project Storytelling'];
 const DIMENSION_COLORS = ['#8B5CF6', '#3B82F6', '#F59E0B', '#10B981'];
 
 function TypeBadge({ type }: { type: 'text' | 'voice' }) {
@@ -149,30 +151,27 @@ function itemsEqual(a: UnifiedInterviewItem[], b: UnifiedInterviewItem[]): boole
   for (let i = 0; i < a.length; i++) {
     const ai = a[i], bi = b[i];
     if (ai.id !== bi.id || ai.status !== bi.status ||
-        ai.evaluateStatus !== bi.evaluateStatus || ai.overallScore !== bi.overallScore) return false;
+      ai.evaluateStatus !== bi.evaluateStatus || ai.overallScore !== bi.overallScore) return false;
   }
   return true;
 }
 
-export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview, onContinueInterview }: InterviewHistoryPageProps) {
+export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview: _onRestartInterview, onContinueInterview }: InterviewHistoryPageProps) {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
   const [stats, setStats] = useState<InterviewStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<InterviewType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [skillFilter, setSkillFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'time_desc' | 'time_asc' | 'score_desc' | 'score_asc'>('time_desc');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [deleteItem, setDeleteItem] = useState<UnifiedInterviewItem | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
   const pollingRef = useRef<number | null>(null);
   const skillsRef = useRef<SkillDTO[]>([]);
   const skillsLoadedRef = useRef(false);
   const voiceSessionIdsRef = useRef<Set<number>>(new Set());
   const [trendGroups, setTrendGroups] = useState<TrendGroup[]>([]);
-  const [dimensionAverages, setDimensionAverages] = useState<{ dimension: string; averageScore: number }[]>([]);
   const [recentSuggestions, setRecentSuggestions] = useState<string[]>([]);
   const [chartRange, setChartRange] = useState<'5' | '10' | '20' | '1d' | '7d' | '30d'>('5');
 
@@ -273,9 +272,9 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
       };
       setStats(prev => {
         if (isPolling && prev &&
-            prev.totalCount === newStats.totalCount &&
-            prev.completedCount === newStats.completedCount &&
-            prev.averageScore === newStats.averageScore) return prev;
+          prev.totalCount === newStats.totalCount &&
+          prev.completedCount === newStats.completedCount &&
+          prev.averageScore === newStats.averageScore) return prev;
         return newStats;
       });
 
@@ -284,7 +283,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         try {
           const agg = await evaluationApi.getAggregatedTrends();
           setTrendGroups(agg.trendGroups);
-          setDimensionAverages(agg.dimensionAverages);
           setRecentSuggestions(agg.recentSuggestions);
         } catch {
           console.warn('获取维度趋势数据失败');
@@ -378,26 +376,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     }
   };
 
-  const handleExport = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExporting(sessionId);
-    try {
-      const blob = await historyApi.exportInterviewPdf(sessionId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `面试报告_${sessionId.slice(-8)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch {
-      alert('导出失败，请重试');
-    } finally {
-      setExporting(null);
-    }
-  };
-
   /** 根据 refSessionId 精确查找对应的面试记录（用于图表悬浮详情） */
   function findSessionByRefId(refSessionId: string): UnifiedInterviewItem | null {
     if (!refSessionId) return null;
@@ -446,74 +424,108 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
   };
 
   // 将 TrendGroup[] 转换为 Recharts 可接受的数据格式
-  const chartData = useMemo(() => {
-    if (trendGroups.length === 0) return [];
+  const rangeItems = useMemo(() => {
+    if (items.length === 0) return [];
 
-    // 收集所有时间点
-    const timeSet = new Set<string>();
-    for (const group of trendGroups) {
-      for (const dp of group.dataPoints) {
-        timeSet.add(dp.createdAt);
-      }
-    }
-    const times = [...timeSet].sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime()
-    );
-
-    return times.map(time => {
-      const point: Record<string, any> = { createdAt: time };
-      // 从第一个找到的 dataPoint 中提取 refSessionId
-      let refSessionId: string | undefined;
-      for (const group of trendGroups) {
-        const dp = group.dataPoints.find(p => p.createdAt === time);
-        if (dp) {
-          point[group.dimension] = dp.score;
-          if (!refSessionId) refSessionId = dp.refSessionId;
-        }
-      }
-      point.__sessionRef = refSessionId;
-      return point;
-    });
-  }, [trendGroups]);
-
-  // 图表筛选：按时间范围或最近N次
-  const filteredChartData = useMemo(() => {
-    if (chartData.length === 0) return [];
-
+    let result: UnifiedInterviewItem[];
     if (chartRange === '1d') {
       const cutoff = Date.now() - 86_400_000;
-      return chartData.filter(p => new Date(p.createdAt).getTime() >= cutoff);
-    }
-    if (chartRange === '7d') {
+      result = items.filter(i => new Date(i.createdAt).getTime() >= cutoff);
+    } else if (chartRange === '7d') {
       const cutoff = Date.now() - 604_800_000;
-      return chartData.filter(p => new Date(p.createdAt).getTime() >= cutoff);
-    }
-    if (chartRange === '30d') {
+      result = items.filter(i => new Date(i.createdAt).getTime() >= cutoff);
+    } else if (chartRange === '30d') {
       const cutoff = Date.now() - 2_592_000_000;
-      return chartData.filter(p => new Date(p.createdAt).getTime() >= cutoff);
+      result = items.filter(i => new Date(i.createdAt).getTime() >= cutoff);
+    } else {
+      // 5/10/20 — 取最近 N 条
+      const limit = parseInt(chartRange);
+      result = [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
     }
 
-    // 按最近N次: 5 / 10 / 20
-    const limit = parseInt(chartRange);
-    // 从 chartData 中取有 __sessionRef 的唯一会话数
-    const seen = new Set<string>();
-    const result: typeof chartData = [];
-    // 从最新开始取
-    for (let i = chartData.length - 1; i >= 0; i--) {
-      const ref = chartData[i].__sessionRef;
-      if (ref) {
-        if (!seen.has(ref)) {
-          seen.add(ref);
-          if (seen.size > limit) break;
+    return result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [chartRange, items]);
+
+  // 以 rangeItems 中的 sessionId 为 key，从 trendGroups 匹配维度评分，时间统一使用 item.createdAt
+  const filteredChartData = useMemo(() => {
+    if (trendGroups.length === 0 || rangeItems.length === 0) return [];
+
+    // 构建 refSessionId → 各维度分数的映射
+    const scoreByRef = new Map<string, Record<string, number>>();
+    for (const group of trendGroups) {
+      for (const dp of group.dataPoints) {
+        const ref = dp.refSessionId;
+        if (!ref) continue;
+        if (!scoreByRef.has(ref)) {
+          scoreByRef.set(ref, {});
         }
-        result.unshift(chartData[i]);
-      } else {
-        result.unshift(chartData[i]);
+        scoreByRef.get(ref)![group.dimension] = dp.score;
       }
     }
-    // 无 __sessionRef 的数据点也显示（兜底）
-    return result;
-  }, [chartData, chartRange]);
+
+    return rangeItems
+      .filter(item => {
+        const textRef = String(item.sessionId);
+        const voiceRef = item.voiceSessionId ? String(item.voiceSessionId) : null;
+        return scoreByRef.has(textRef) || (voiceRef !== null && scoreByRef.has(voiceRef));
+      })
+      .map(item => {
+        const textRef = String(item.sessionId);
+        const voiceRef = item.voiceSessionId ? String(item.voiceSessionId) : null;
+        const scores = scoreByRef.get(textRef) || (voiceRef ? scoreByRef.get(voiceRef) : undefined) || {};
+
+        const point: Record<string, any> = {
+          createdAt: item.createdAt,
+          __sessionRef: textRef,
+        };
+        for (const group of trendGroups) {
+          if (scores[group.dimension] !== undefined) {
+            point[group.dimension] = scores[group.dimension];
+          }
+        }
+        return point;
+      });
+  }, [trendGroups, rangeItems]);
+
+  // 根据 rangeItems 计算统计值
+  const filteredStats = useMemo(() => {
+    if (rangeItems.length === 0) return null;
+
+    const evaluated = rangeItems.filter(i => isEvaluateCompleted(i));
+    const totalScore = evaluated.reduce((sum, i) => sum + (i.overallScore || 0), 0);
+
+    return {
+      totalCount: rangeItems.length,
+      completedCount: evaluated.length,
+      averageScore: evaluated.length > 0 ? Math.round(totalScore / evaluated.length) : null,
+    };
+  }, [rangeItems]);
+
+  // 基于 rangeItems 的 sessionId 匹配 trendGroups 计算维度平均分
+  const filteredDimensionAverages = useMemo(() => {
+    if (trendGroups.length === 0) return [];
+
+    const sessionIds = new Set<string>();
+    for (const item of rangeItems) {
+      sessionIds.add(String(item.sessionId));
+      if (item.voiceSessionId) sessionIds.add(String(item.voiceSessionId));
+    }
+
+    return trendGroups.map(group => {
+      const matched = group.dataPoints.filter(dp => {
+        const ref = dp.refSessionId;
+        return ref !== undefined && sessionIds.has(ref);
+      });
+
+      const avg = matched.length > 0
+        ? Math.round(matched.reduce((sum, dp) => sum + dp.score, 0) / matched.length)
+        : null;
+
+      return { dimension: group.dimension, averageScore: avg };
+    });
+  }, [trendGroups, rangeItems]);
+
+  const hasFilteredData = rangeItems.length === 0 || filteredChartData.length > 0;
 
   // Extract unique skill titles from items
   const uniqueSkills = useMemo(() => {
@@ -525,7 +537,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
   const filtered = useMemo(() => {
     let result = items.filter(item => {
       if (typeFilter !== 'all' && item.type !== typeFilter) return false;
-      if (searchTerm && !item.title.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      // search filter removed
       if (statusFilter === 'completed' && !isEvaluateCompleted(item)) return false;
       if (statusFilter === 'incomplete' && isEvaluateCompleted(item)) return false;
       if (skillFilter !== 'all' && item.title !== skillFilter) return false;
@@ -546,7 +558,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     });
 
     return result;
-  }, [items, typeFilter, searchTerm, statusFilter, skillFilter, sortBy]);
+  }, [items, typeFilter, statusFilter, skillFilter, sortBy]);
 
   return (
     <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -567,11 +579,11 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            查看和管理所有模拟面试记录
+            回顾面试过程，追踪成长轨迹，发现提升空间
           </motion.p>
         </div>
 
-        <motion.div
+        {/* <motion.div
           className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 min-w-[280px] focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100 dark:focus-within:ring-primary-900/30 transition-all"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -584,7 +596,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 bg-transparent"
           />
-        </motion.div>
+        </motion.div> */}
       </div>
 
       {/* 顶部：趋势折线图 + 总体信息 */}
@@ -602,11 +614,11 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             </h2>
             <div className="flex items-center gap-3 text-sm">
               <span className="text-slate-500 dark:text-slate-400">
-                总平均: <strong className="text-indigo-600 dark:text-indigo-400">{stats.averageScore}分</strong>
+                总平均: <strong className="text-primary-600 dark:text-primary-400">{filteredStats ? (filteredStats.averageScore !== null ? `${filteredStats.averageScore}分` : '-') : '-'}</strong>
               </span>
               <span className="text-slate-300 dark:text-slate-600">|</span>
               <span className="text-slate-500 dark:text-slate-400">
-                已完成: <strong className="text-emerald-600 dark:text-emerald-400">{stats.completedCount}</strong> / {stats.totalCount} 次
+                已完成: <strong className="text-emerald-600 dark:text-emerald-400">{filteredStats ? filteredStats.completedCount : '-'}</strong> / {filteredStats ? filteredStats.totalCount : '-'} 次
               </span>
             </div>
           </div>
@@ -625,11 +637,10 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
               <button
                 key={opt.key}
                 onClick={() => setChartRange(opt.key)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  chartRange === opt.key
-                    ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
-                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${chartRange === opt.key
+                  ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
               >
                 {opt.label}
               </button>
@@ -683,9 +694,10 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
           )}
 
           {/* 维度平均分 */}
-          {dimensionAverages.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              {dimensionAverages.map(da => (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            {(filteredDimensionAverages.length > 0 ? filteredDimensionAverages : DIMENSION_KEYS.map(d => ({ dimension: d, averageScore: null as number | null }))).map(da => {
+              const score = da.averageScore;
+              return (
                 <div
                   key={da.dimension}
                   className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center"
@@ -693,16 +705,16 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                     {DIMENSION_LABELS[da.dimension] || da.dimension}
                   </p>
-                  <p className={`text-lg font-bold ${getScoreTextColor(da.averageScore)}`}>
-                    {da.averageScore}
+                  <p className={`text-lg font-bold ${score !== null ? getScoreTextColor(score) : 'text-slate-300 dark:text-slate-600'}`}>
+                    {score !== null ? score : '-'}
                   </p>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
 
           {/* 最近建议 */}
-          {recentSuggestions.length > 0 && (
+          {recentSuggestions.length > 0 && hasFilteredData && (
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
               <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-500" />
@@ -773,21 +785,19 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
           <span className="text-xs text-slate-400 dark:text-slate-500">排序:</span>
           <button
             onClick={() => setSortBy(prev => prev === 'time_desc' ? 'time_asc' : 'time_desc')}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              sortBy === 'time_desc' || sortBy === 'time_asc'
-                ? 'bg-primary-500 text-white shadow-sm'
-                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
-            }`}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortBy === 'time_desc' || sortBy === 'time_asc'
+              ? 'bg-primary-500 text-white shadow-sm'
+              : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
+              }`}
           >
             {sortBy === 'time_asc' ? '时间 ↑' : '时间 ↓'}
           </button>
           <button
             onClick={() => setSortBy(prev => prev === 'score_desc' ? 'score_asc' : 'score_desc')}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              sortBy === 'score_desc' || sortBy === 'score_asc'
-                ? 'bg-primary-500 text-white shadow-sm'
-                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
-            }`}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortBy === 'score_desc' || sortBy === 'score_asc'
+              ? 'bg-primary-500 text-white shadow-sm'
+              : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
+              }`}
           >
             {sortBy === 'score_asc' ? '分数 ↑' : '分数 ↓'}
           </button>
@@ -810,7 +820,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         >
           <Users className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无面试记录</h3>
-          <p className="text-slate-500 dark:text-slate-400">开始一次模拟面试后，记录将显示在这里</p>
+          <p className="text-slate-500 dark:text-slate-400">完成一次模拟面试后，成绩与评估报告将汇集于此</p>
         </motion.div>
       )}
 
@@ -906,7 +916,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {item.type === 'text' && !isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
+                        {item.type === 'text' && item.status === 'IN_PROGRESS' && !isEvaluating(item) && onContinueInterview && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onContinueInterview(String(item.sessionId)); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -915,7 +925,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             <PlayCircle className="w-4 h-4" />
                           </button>
                         )}
-                        {item.type === 'voice' && isLiveStatus(item.status) && item.voiceSessionId && (
+                        {item.type === 'voice' && isLiveStatus(item.status) && !isEvaluating(item) && item.voiceSessionId && (
                           <button
                             onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: Number(item.voiceSessionId) } }); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -924,38 +934,15 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             <PlayCircle className="w-4 h-4" />
                           </button>
                         )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && (
-                          <button
-                            onClick={(e) => handleExport(String(item.sessionId), e)}
-                            disabled={exporting === item.sessionId}
-                            className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50"
-                            title="导出PDF"
-                          >
-                            {exporting === item.sessionId ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Download className="w-4 h-4" />
-                            )}
-                          </button>
-                        )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && item.resumeId && onRestartInterview && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onRestartInterview(item.resumeId!); }}
-                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-                            title="重新面试"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </button>
-                        )}
                         <button
-                            onClick={(e) => handleDeleteClick(item, e)}
-                            disabled={deletingSessionId === item.sessionId}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-                            title="删除"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        <ChevronRight className="w-5 h-5 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 group-hover:translate-x-1 transition-all"/>
+                          onClick={(e) => handleDeleteClick(item, e)}
+                          disabled={deletingSessionId === item.sessionId}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                          title="删除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <ChevronRight className="w-5 h-5 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
                       </div>
                     </td>
                   </motion.tr>

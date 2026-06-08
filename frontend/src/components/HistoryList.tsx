@@ -282,7 +282,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
             icon={MessageSquare}
             label="面试总数"
             value={stats.totalInterviewCount}
-            color="bg-indigo-500"
+            color="bg-primary-500"
           />
           <StatCard
             icon={Eye}
@@ -309,7 +309,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
         >
           <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-slate-700 mb-2">暂无简历记录</h3>
-          <p className="text-slate-500">上传简历开始您的第一次 AI 面试分析</p>
+          <p className="text-slate-500">还没有简历？上传一份简历，开启 AI 智能分析之旅</p>
         </motion.div>
       )}
 

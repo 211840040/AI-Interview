@@ -114,7 +114,7 @@ export default function ExerciseHubPage() {
           专项练习
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">
-          选择知识点领域，逐题练习八股题目
+          按知识点分类刷题，巩固理论基础，查漏补缺
         </p>
       </motion.div>
 

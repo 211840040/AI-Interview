@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
+import { Clock, PhoneOff, AlertCircle, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
+import femaleAvatar from '../assets/female.png';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
-import InterviewPageHeader from '../components/InterviewPageHeader';
 import RealtimeSubtitle from '../components/RealtimeSubtitle';
 import { skillApi, type SkillDTO } from '../api/skill';
 import { getTemplateName } from '../utils/voiceInterview';
@@ -22,6 +22,15 @@ type VoiceConfig = {
   plannedDuration: number;
   resumeId?: number;
   llmProvider?: string;
+};
+
+const SKILL_NAMES: Record<string, string> = {
+  'java-backend': 'Java 后端',
+  'frontend': '前端开发',
+  'algorithm': '算法',
+  'system-design': '系统设计',
+  'test-development': '测试开发',
+  'ai-agent-dev': 'AI Agent 开发',
 };
 
 export default function VoiceInterviewPage() {
@@ -71,7 +80,6 @@ export default function VoiceInterviewPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<VoiceInterviewWebSocket | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
-  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoStartRef = useRef(false);
   const endedByUserRef = useRef(false);
   const isAiSpeakingRef = useRef(false);
@@ -265,7 +273,7 @@ export default function VoiceInterviewPage() {
     }
   }, [skills, effectiveSkillId]);
 
-  // Cleanup on unmount — 自动暂停未结束的 session
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -282,7 +290,6 @@ export default function VoiceInterviewPage() {
         drainCheckRef.current = null;
       }
       clearPendingAiTextCommit();
-      // 用户没有主动结束/暂停时，自动暂停 session
       const currentSessionId = sessionId;
       if (currentSessionId && !endedByUserRef.current) {
         voiceInterviewApi.pauseSession(currentSessionId).catch(() => {});
@@ -340,7 +347,7 @@ export default function VoiceInterviewPage() {
     return phaseMap[phase] || phase;
   };
 
-  // 手动提交回答：ASR 只负责生成可编辑文本，不自动触发 LLM
+  // 手动提交回答
   const handleSubmitAnswer = useCallback(() => {
     if (!wsRef.current || !wsRef.current.isConnected()) {
       return;
@@ -366,7 +373,6 @@ export default function VoiceInterviewPage() {
     },
     onMessage: () => {},
     onSubtitle: (text: string, isFinal: boolean) => {
-      // isFinal=true 由 triggerLlmResponse 触发，表示本轮用户回答已提交到 LLM
       if (isFinal && text.trim()) {
         setMessages(prev => {
           const last = prev[prev.length - 1];
@@ -393,10 +399,10 @@ export default function VoiceInterviewPage() {
         setAiAudio(audioData);
         setAiText(normalized);
         setAiSpeaking(true);
-        const durationMs = estimateWavDurationMs(audioData);
+        const duration = estimateWavDurationMs(audioData);
         audioPlaybackWatchdogRef.current = setTimeout(
           finishAiPlayback,
-          Math.min(Math.max(durationMs + 1500, 4000), 60_000)
+          Math.min(Math.max(duration + 1500, 4000), 60_000)
         );
         return;
       }
@@ -613,7 +619,7 @@ export default function VoiceInterviewPage() {
     }
   }, [connectWithHandlers]);
 
-  // Auto-start: 新建 or 恢复
+  // Auto-start
   useEffect(() => {
     if (autoStartRef.current) return;
 
@@ -635,7 +641,7 @@ export default function VoiceInterviewPage() {
     }
   }, [handlePhaseConfig, handleResumeSession, presetVoiceConfig, resumeSessionId]);
 
-  // 麦克风音频持续发送给服务端做 ASR；仅 AI 播放时停发，避免回声进入识别
+  // 麦克风音频持续发送给服务端做 ASR
   const handleAudioData = (audioData: string) => {
     if (isAiSpeakingRef.current || isSubmittingRef.current) {
       return;
@@ -652,40 +658,6 @@ export default function VoiceInterviewPage() {
 
   const handleSpeechStart = () => {};
   const handleSpeechEnd = () => {};
-
-  const handlePause = async (type: 'short' | 'long') => {
-    if (!sessionId) return;
-
-    if (type === 'short') {
-      setIsRecording(false);
-      pauseTimeoutRef.current = setTimeout(() => {
-        handleLongPause();
-      }, 5 * 60 * 1000);
-    } else {
-      await handleLongPause();
-    }
-  };
-
-  const handleLongPause = async () => {
-    endedByUserRef.current = true;
-    if (pauseTimeoutRef.current) {
-      clearTimeout(pauseTimeoutRef.current);
-      pauseTimeoutRef.current = null;
-    }
-    if (wsRef.current) {
-      wsRef.current.disconnect();
-    }
-    if (isRecording) {
-      setIsRecording(false);
-    }
-    if (!sessionId) return;
-    try {
-      await voiceInterviewApi.pauseSession(sessionId);
-      navigate('/interviews');
-    } catch (error) {
-      alert('暂停失败，请重试');
-    }
-  };
 
   const handleEndInterview = async () => {
     endedByUserRef.current = true;
@@ -709,31 +681,10 @@ export default function VoiceInterviewPage() {
     navigate('/history');
   };
 
-  // 提交按钮是否可用
   const canSubmit = !!userText.trim() && !isAiSpeaking && !isSubmitting && connectionStatus === 'connected';
   const canRecord = connectionStatus === 'connected' && isAsrReady && !isAiSpeaking && !isSubmitting;
-  const recorderHint = connectionStatus !== 'connected'
-    ? '正在连接服务器...'
-    : !isAsrReady
-      ? '语音识别准备中...'
-      : isAiSpeaking
-        ? '面试官正在回答...'
-        : isSubmitting
-          ? '正在思考...'
-          : isRecording
-            ? '正在聆听，说完后点击提交回答...'
-            : '点击麦克风开始发言';
-  const footerHint = isAiSpeaking
-    ? '面试官正在回答...'
-    : isSubmitting
-      ? '正在思考...'
-      : connectionStatus !== 'connected'
-        ? '正在连接服务器'
-        : !isAsrReady
-          ? '语音识别准备中'
-          : isRecording
-            ? '说完后点击提交回答'
-            : '点击麦克风发言';
+
+  const skillName = SKILL_NAMES[effectiveSkillId] || templateName || effectiveSkillId;
 
   if (!autoStartRef.current && !presetVoiceConfig && !resumeSessionId) {
     return (
@@ -741,7 +692,7 @@ export default function VoiceInterviewPage() {
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请从面试记录或"语音面试"入口开始</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请通过「模拟面试」页面选择语音模式开始</p>
           <button
             onClick={handleCloseModal}
             className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
@@ -754,162 +705,285 @@ export default function VoiceInterviewPage() {
   }
 
   return (
-    <div className="pb-10">
-      <div className="max-w-7xl mx-auto">
-        <InterviewPageHeader
-          title="语音模拟面试"
-          subtitle="实时语音对话，面试官会根据你的回答持续追问"
-          icon={<Mic className="w-6 h-6 text-white" />}
-        />
-
-        {error && (
-          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-3 rounded-xl flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 5rem)' }}>
+      {/* Immersive top bar */}
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <motion.button
+              onClick={() => navigate('/interviews')}
+              className="p-2 -ml-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </motion.button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
+                <Mic className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">语音模拟面试</h1>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{skillName}</p>
+              </div>
+            </div>
           </div>
+
+          <div className="flex items-center gap-3">
+            {/* Phase badge */}
+            <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-xs font-medium text-primary-600 dark:text-primary-400">
+              {getPhaseLabel(currentPhase)}
+            </span>
+            {/* Connection status */}
+            <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+              connectionStatus === 'connected'
+                ? isAsrReady
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                : connectionStatus === 'connecting'
+                  ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                  : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                connectionStatus === 'connected' && isAsrReady
+                  ? 'bg-emerald-500'
+                  : connectionStatus === 'connected'
+                    ? 'bg-amber-500 animate-pulse'
+                    : connectionStatus === 'connecting'
+                      ? 'bg-amber-500 animate-pulse'
+                      : 'bg-red-500'
+              }`} />
+              {connectionStatus === 'connected'
+                ? isAsrReady ? '就绪' : '准备中'
+                : connectionStatus === 'connecting' ? '连接中' : '断开'}
+            </span>
+            {/* Timer */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-mono font-bold text-slate-600 dark:text-slate-300">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              {formatTime(currentTime)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-2.5 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">{error}</span>
+            </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 space-y-6">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => navigate('/interviews')}
-                    className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center"
-                    title="返回面试记录"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{templateName || effectiveSkillId}</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300 rounded-full">
-                        {getPhaseLabel(currentPhase)}
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {connectionStatus === 'connected'
-                          ? isAsrReady ? '语音识别就绪' : '语音识别准备中'
-                          : connectionStatus === 'connecting' ? '连接中' : '连接断开'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+      {/* Main content area — 3 cards */}
+      <div className="flex-1 min-h-0 p-4">
+        <div className="max-w-7xl mx-auto h-full grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {/* ===== Left 2/3: Avatar card + Answer card ===== */}
+          <div className="xl:col-span-2 h-full flex flex-col gap-4">
+            {/* --- Card 1: Interviewer Avatar --- */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+              {/* Sound wave rings — only when AI speaking */}
+              <AnimatePresence>
+                {isAiSpeaking && (
+                  <>
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={`wave-${i}`}
+                        className="absolute rounded-full border border-primary-400/30 dark:border-primary-500/20"
+                        initial={{ width: 128, height: 128, opacity: 0.5 }}
+                        animate={{
+                          width: [128, 128 + (i + 1) * 70],
+                          height: [128, 128 + (i + 1) * 70],
+                          opacity: [0.5, 0],
+                        }}
+                        transition={{
+                          duration: 1.8,
+                          repeat: Infinity,
+                          delay: i * 0.35,
+                          ease: 'easeOut',
+                        }}
+                        style={{
+                          marginLeft: -(64 + (i + 1) * 35),
+                          marginTop: -(64 + (i + 1) * 35),
+                          top: '50%',
+                          left: '50%',
+                        }}
+                      />
+                    ))}
+                    {/* Extra outer breathing ring */}
+                    <motion.div
+                      className="absolute rounded-full border-2 border-primary-300/20 dark:border-primary-400/10"
+                      initial={{ width: 140, height: 140, opacity: 0.3 }}
+                      animate={{
+                        width: [140, 260],
+                        height: [140, 260],
+                        opacity: [0.3, 0],
+                      }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        ease: 'easeOut',
+                      }}
+                      style={{
+                        marginLeft: -70,
+                        marginTop: -70,
+                        top: '50%',
+                        left: '50%',
+                      }}
+                    />
+                  </>
+                )}
+              </AnimatePresence>
 
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                  <Clock className="w-4 h-4" />
-                  <span className="font-mono text-sm tabular-nums">{formatTime(currentTime)}</span>
-                </div>
+              {/* Avatar */}
+              <div className="relative w-[280px] h-[280px]">
+                {/* 说话时光效 */}
+                {isAiSpeaking && (
+                  <motion.div
+                    className="absolute inset-0 rounded-full"
+                    animate={{
+                      boxShadow: [
+                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
+                        '0 0 60px 20px rgba(16,185,129,0.4), 0 0 100px 40px rgba(16,185,129,0.2)',
+                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
+                      ],
+                      scale: [1, 1.05, 1],
+                      transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+                    }}
+                  />
+                )}
+                <motion.div
+                  animate={isAiSpeaking ? {
+                    scale: [1, 1.03, 1],
+                    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+                  } : {}}
+                  className={`relative z-10 w-full h-full rounded-full flex items-center justify-center transition-all duration-500 overflow-hidden ${
+                    isAiSpeaking
+                      ? 'ring-4 ring-primary-300/60 shadow-2xl shadow-primary-400/30'
+                      : 'ring-2 ring-slate-200 dark:ring-slate-600 shadow-xl'
+                  }`}
+                >
+                  <img src={femaleAvatar} alt="面试官" className="w-full h-full rounded-full object-cover" />
+                </motion.div>
               </div>
 
-              <div className="flex flex-col items-center justify-center py-6">
-                <motion.div
-                  animate={isAiSpeaking ? { scale: [1, 1.05, 1] } : {}}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                  className={`w-32 h-32 rounded-full border-4 flex items-center justify-center mb-6 transition-colors
-                    ${isAiSpeaking
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60'
-                    }`}
-                >
-                  <Bot className={`w-14 h-14 ${isAiSpeaking ? 'text-primary-500' : 'text-slate-400 dark:text-slate-500'}`} />
-                </motion.div>
-
-                <div className="w-full max-w-2xl min-h-[130px] rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 px-6 py-5 text-center flex items-center justify-center">
-                  <AnimatePresence mode="wait">
-                    {isAiSpeaking || aiText ? (
-                      <motion.p
-                        key="ai-active"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="text-lg md:text-xl font-medium text-slate-800 dark:text-slate-100 leading-relaxed"
-                      >
-                        {aiText || '思考中...'}
-                      </motion.p>
-                    ) : userText ? (
-                      <motion.p
-                        key="user-active"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="text-lg md:text-xl font-medium text-primary-600 dark:text-primary-300 italic leading-relaxed"
-                      >
-                        {userText}
-                      </motion.p>
-                    ) : (
-                      <motion.p
-                        key="idle"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-slate-500 dark:text-slate-400"
-                      >
-                        {recorderHint}
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-                </div>
+              {/* Question text below avatar */}
+              <div className="relative z-10 w-full max-w-lg mt-5 min-h-[56px]">
+                <AnimatePresence mode="wait">
+                  {isAiSpeaking && aiText ? (
+                    <motion.p
+                      key="ai-q"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="text-center text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed px-4"
+                    >
+                      {aiText}
+                      <motion.span
+                        className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1 rounded-full"
+                        animate={{ opacity: [1, 0.25, 1] }}
+                        transition={{ duration: 0.8, repeat: Infinity }}
+                      />
+                    </motion.p>
+                  ) : !isAiSpeaking && !isSubmitting && messages.length === 0 ? (
+                    <motion.p
+                      key="waiting"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-center text-sm text-slate-400 dark:text-slate-500 px-4"
+                    >
+                      面试即将开始，请准备...
+                    </motion.p>
+                  ) : (
+                    <motion.p
+                      key="idle"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-center text-sm text-slate-400 dark:text-slate-500 px-4"
+                    >
+                      {isSubmitting ? '正在思考...' : '等待下一题...'}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-5">
-              <div className="flex items-center justify-center gap-6">
-                <button
-                  onClick={() => {
-                    const choice = window.confirm('暂停面试？\n确定 = 短暂停（5分钟）\n取消 = 离开并保存');
-                    handlePause(choice ? 'short' : 'long');
-                  }}
-                  disabled={connectionStatus !== 'connected'}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
-                  title="暂停"
-                >
-                  暂停
-                </button>
+            {/* --- Card 2: User Answer + Controls --- */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4">
+              {/* ASR recognized text display */}
+              <div className="mb-3 min-h-[44px] px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                <AnimatePresence mode="wait">
+                  {userText ? (
+                    <motion.p
+                      key="asr-text"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed"
+                    >
+                      {userText}
+                      {isRecording && (
+                        <span className="inline-block w-2 h-4 bg-primary-500 ml-0.5 animate-pulse" />
+                      )}
+                    </motion.p>
+                  ) : (
+                    <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+                      {isRecording ? '正在聆听...' : '点击麦克风开始说话'}
+                    </p>
+                  )}
+                </AnimatePresence>
+              </div>
 
-                <AudioRecorder
-                  isRecording={isRecording}
-                  disabled={!isRecording && !canRecord}
-                  onRecordingChange={setIsRecording}
-                  onAudioData={handleAudioData}
-                  onSpeechStart={handleSpeechStart}
-                  onSpeechEnd={handleSpeechEnd}
-                />
-
-                <button
-                  onClick={handleSubmitAnswer}
-                  disabled={!canSubmit}
-                  className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                    canSubmit
-                      ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-md shadow-primary-500/30'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                  }`}
-                  title="提交回答"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <SendHorizonal className="w-4 h-4" />
-                    提交回答
-                  </span>
-                </button>
-
+              {/* 3 buttons: End | Mic | Submit — equal width */}
+              <div className="flex items-center gap-3">
+                {/* End button (left) */}
                 <button
                   onClick={handleEndInterview}
                   disabled={connectionStatus !== 'connected'}
-                  className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50"
-                  title="结束面试"
+                  className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    <PhoneOff className="w-4 h-4" />
-                    结束
-                  </span>
+                  <PhoneOff className="w-4 h-4" />
+                  结束
+                </button>
+
+                {/* Mic button (center) */}
+                <div className="flex-1 flex items-center justify-center">
+                  <AudioRecorder
+                    isRecording={isRecording}
+                    disabled={!isRecording && !canRecord}
+                    onRecordingChange={setIsRecording}
+                    onAudioData={handleAudioData}
+                    onSpeechStart={handleSpeechStart}
+                    onSpeechEnd={handleSpeechEnd}
+                  />
+                </div>
+
+                {/* Submit button (right) */}
+                <button
+                  onClick={handleSubmitAnswer}
+                  disabled={!canSubmit}
+                  className={`flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                    canSubmit
+                      ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md shadow-primary-500/25 hover:shadow-lg'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <SendHorizonal className="w-4 h-4" />
+                  提交回答
                 </button>
               </div>
-              <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-3">
-                {footerHint}
-              </p>
             </div>
           </div>
 
-          <div className="h-[520px] md:h-[560px] xl:h-[calc(100vh-240px)] xl:max-h-[760px] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+          {/* ===== Right 1/3: Conversation Log (list style) ===== */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col min-h-0">
             <RealtimeSubtitle
               messages={messages}
               userText={userText}

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import InterviewMessageBubble from './InterviewMessageBubble';
 
 interface Message {
   role: 'user' | 'ai';
@@ -29,7 +28,6 @@ export default function RealtimeSubtitle({
     !!activeAiText &&
     latestAiMessage?.text.trim() !== activeAiText.trim();
 
-  // Auto-scroll to bottom on new messages or text updates
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -37,92 +35,91 @@ export default function RealtimeSubtitle({
   }, [messages, userText, activeAiText]);
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-800 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-slate-800 overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/80">
-        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 tracking-wide">对话实录</h4>
-        <div className="flex items-center gap-3">
-          {isAiSpeaking && (
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-pulse" />
-              <span className="text-[10px] uppercase tracking-wider text-primary-400 font-semibold">AI 说</span>
-            </div>
-          )}
-          {userText && (
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-[10px] uppercase tracking-wider text-green-400 font-semibold">你在说</span>
-            </div>
-          )}
+      <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">对话实录</h4>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500">共 {messages.length} 条</span>
         </div>
       </div>
 
-      {/* Chat History */}
+      {/* List-style conversation log */}
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5 scroll-smooth"
       >
-        <AnimatePresence initial={false}>
-          {/* History Messages */}
-          {messages.map((msg) => (
-            <div key={msg.id}>
-              <InterviewMessageBubble
-                role={msg.role === 'user' ? 'user' : 'interviewer'}
-                text={msg.text}
-              />
-            </div>
-          ))}
+        {messages.length === 0 && !userText && !isAiSpeaking ? (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-xs text-slate-400 dark:text-slate-500">暂无对话记录</p>
+          </div>
+        ) : (
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, x: msg.role === 'ai' ? -8 : 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`flex items-start gap-2 px-3 py-2 rounded-xl text-sm leading-relaxed ${
+                  msg.role === 'ai'
+                    ? 'bg-sky-50 dark:bg-sky-900/20 text-slate-700 dark:text-slate-300'
+                    : 'bg-emerald-50 dark:bg-emerald-900/20 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <span
+                  className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
+                    msg.role === 'ai'
+                      ? 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
+                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {msg.role === 'ai' ? 'Q' : 'A'}
+                </span>
+                <span className="flex-1">{msg.text}</span>
+              </motion.div>
+            ))}
 
-          {/* Current AI Response (Active) */}
-          {shouldShowActiveAi && (
-            <motion.div
-              key="active-ai"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              <InterviewMessageBubble
-                role="interviewer"
-                text={activeAiText}
-                highlight
-                suffix={(
+            {/* Live AI entry */}
+            {shouldShowActiveAi && (
+              <motion.div
+                key="active-ai"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-2 px-3 py-2 rounded-xl text-sm leading-relaxed bg-sky-50 dark:bg-sky-900/20 text-slate-700 dark:text-slate-300"
+              >
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center text-[10px] font-bold mt-0.5">
+                  Q
+                </span>
+                <span className="flex-1">
+                  {activeAiText}
                   <motion.span
-                    className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1.5 rounded-full"
-                    animate={{ opacity: [1, 0.25, 1] }}
-                    transition={{ duration: 0.9, repeat: Infinity }}
+                    className="inline-block w-1 h-3.5 bg-sky-500 ml-0.5 align-middle"
+                    animate={{ opacity: [1, 0.2, 1] }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
                   />
-                )}
-              />
-            </motion.div>
-          )}
+                </span>
+              </motion.div>
+            )}
 
-          {/* Current User Input (Real-time) */}
-          {userText && (
-            <InterviewMessageBubble
-              role="user"
-              text={userText}
-              highlight
-              italic
-              suffix={<span className="ml-1 animate-pulse">...</span>}
-            />
-          )}
-
-          {/* Empty State */}
-          {messages.length === 0 && !userText && !aiText && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-12"
-            >
-              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-600">
-                <svg className="w-5 h-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <p className="text-sm">面试即将开始，请准备</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {/* Live user entry */}
+            {userText && !shouldShowActiveAi && (
+              <motion.div
+                key="active-user"
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-2 px-3 py-2 rounded-xl text-sm leading-relaxed bg-emerald-50 dark:bg-emerald-900/20 text-slate-700 dark:text-slate-300 italic"
+              >
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-bold mt-0.5">
+                  A
+                </span>
+                <span className="flex-1">{userText}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );

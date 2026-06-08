@@ -3,11 +3,11 @@ import {motion} from 'framer-motion';
 import {interviewApi} from '../api/interview';
 import ConfirmDialog from '../components/ConfirmDialog';
 import InterviewChatPanel from '../components/InterviewChatPanel';
-import InterviewPageHeader from '../components/InterviewPageHeader';
 import type {InterviewQuestion, InterviewSession} from '../types/interview';
 import type {Difficulty} from '../components/UnifiedInterviewModal';
 import type {CategoryDTO} from '../api/skill';
-import { CUSTOM_SKILL_ID } from '../hooks/useInterviewConfig';
+import {CUSTOM_SKILL_ID} from '../hooks/useInterviewConfig';
+import {ArrowLeft, Clock, Sparkles, BookOpen} from 'lucide-react';
 
 interface Message {
   type: 'interviewer' | 'user';
@@ -29,8 +29,23 @@ interface InterviewProps {
     jdText?: string;
   };
   onBack: () => void;
-  onInterviewComplete: () => void;
+  onInterviewComplete: (sessionId?: string) => void;
 }
+
+const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
+  'junior': { label: '初级', color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30' },
+  'mid': { label: '中级', color: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
+  'senior': { label: '高级', color: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
+};
+
+const SKILL_NAMES: Record<string, string> = {
+  'java-backend': 'Java 后端',
+  'frontend': '前端开发',
+  'algorithm': '算法',
+  'system-design': '系统设计',
+  'test-development': '测试开发',
+  'ai-agent-dev': 'AI Agent 开发',
+};
 
 export default function Interview({
   resumeText,
@@ -49,6 +64,9 @@ export default function Interview({
   const [isCreating, setIsCreating] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const startedRef = useRef(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const questionCount = initialConfig?.questionCount ?? 8;
   const llmProvider = initialConfig?.llmProvider ?? '';
@@ -56,6 +74,33 @@ export default function Interview({
   const difficulty = initialConfig?.difficulty ?? 'mid';
   const customCategories = initialConfig?.customCategories;
   const jdText = initialConfig?.jdText;
+
+  const skillName = SKILL_NAMES[skillId] || initialConfig?.skillId || '通用';
+  const diffInfo = DIFFICULTY_LABELS[difficulty] || DIFFICULTY_LABELS['mid'];
+
+  // Timer
+  useEffect(() => {
+    if (session && !isCreating) {
+      startTimeRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+        }
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [session, isCreating]);
+
+  const formatTime = (totalSeconds: number): string => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   // 自动开始面试（恢复已有会话 或 创建新会话）
   useEffect(() => {
@@ -175,7 +220,11 @@ export default function Interview({
           questionIndex: response.nextQuestion!.questionIndex
         }]);
       } else {
-        onInterviewComplete();
+        // Last question answered — complete session to trigger evaluation
+        await interviewApi.completeInterview(session.sessionId).catch(() => {});
+        // Wait for backend to register the evaluation status before navigating
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        onInterviewComplete(session.sessionId);
       }
     } catch (err) {
       setError('提交答案失败，请重试');
@@ -192,7 +241,9 @@ export default function Interview({
     try {
       await interviewApi.completeInterview(session.sessionId);
       setShowCompleteConfirm(false);
-      onInterviewComplete();
+      // Wait for backend to register the evaluation status before navigating
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      onInterviewComplete(session.sessionId);
     } catch (err) {
       setError('提前交卷失败，请重试');
       console.error(err);
@@ -204,10 +255,22 @@ export default function Interview({
   // 加载中
   if (isCreating) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="w-10 h-10 border-3 border-slate-200 border-t-primary-500 rounded-full mx-auto mb-4 animate-spin" />
-          <p className="text-slate-500 dark:text-slate-400">正在生成面试题目...</p>
+          <motion.div
+            className="w-14 h-14 mx-auto mb-5 bg-gradient-to-br from-primary-100 to-primary-50 dark:from-primary-900/30 dark:to-primary-800/20 rounded-2xl flex items-center justify-center"
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Sparkles className="w-7 h-7 text-primary-500" />
+          </motion.div>
+          <motion.div
+            className="w-10 h-10 border-3 border-slate-200 dark:border-slate-600 border-t-primary-500 rounded-full mx-auto mb-4"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          />
+          <p className="text-slate-500 dark:text-slate-400 font-medium">正在生成面试题目...</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">AI 正在为你量身定制面试题目，请稍候...</p>
         </div>
       </div>
     );
@@ -216,19 +279,22 @@ export default function Interview({
   // 错误状态
   if (error && !session) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <p className="text-red-500 dark:text-red-400 mb-4">{error}</p>
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center justify-center">
+            <span className="text-2xl">!</span>
+          </div>
+          <p className="text-red-500 dark:text-red-400 mb-6 font-medium">{error}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={startInterview}
-              className="px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+              className="px-6 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-medium shadow-sm shadow-primary-500/20 hover:shadow-md transition-all"
             >
               重试
             </button>
             <button
               onClick={onBack}
-              className="px-5 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
             >
               返回
             </button>
@@ -241,38 +307,77 @@ export default function Interview({
   if (!session || !currentQuestion) return null;
 
   return (
-    <div className="pb-10">
-      <InterviewPageHeader
-        title="模拟面试"
-        subtitle="认真回答每个问题，展示您的实力"
-        icon={(
-          <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        )}
-      />
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 5rem)' }}>
+      {/* Immersive top bar */}
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <motion.button
+              onClick={onBack}
+              className="p-2 -ml-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </motion.button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
+                <BookOpen className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">文字模拟面试</h1>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">认真回答每个问题</p>
+              </div>
+            </div>
+          </div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        <InterviewChatPanel
-          session={session}
-          currentQuestion={currentQuestion}
-          messages={messages}
-          answer={answer}
-          onAnswerChange={setAnswer}
-          onSubmit={handleSubmitAnswer}
-          onCompleteEarly={handleCompleteEarly}
-          isSubmitting={isSubmitting}
-          showCompleteConfirm={showCompleteConfirm}
-          onShowCompleteConfirm={setShowCompleteConfirm}
-        />
-      </motion.div>
+          <div className="flex items-center gap-3">
+            {/* Skill badge */}
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <Sparkles className="w-3.5 h-3.5 text-primary-500" />
+              {skillName}
+            </span>
+            {/* Difficulty badge */}
+            <span className={`hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium ${diffInfo.color}`}>
+              {diffInfo.label}
+            </span>
+            {/* Timer */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-mono font-bold text-slate-600 dark:text-slate-300">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              {formatTime(elapsedSeconds)}
+            </div>
+            {/* Question count badge */}
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-xs font-medium text-primary-600 dark:text-primary-400">
+              <span className="font-bold">{messages.filter(m => m.type === 'user').length}</span>
+              <span className="text-primary-400 dark:text-primary-500">/</span>
+              <span>{session.totalQuestions}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main chat area */}
+      <div className="flex-1 max-w-5xl mx-auto w-full p-4 overflow-hidden">
+        <motion.div
+          className="h-full"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <InterviewChatPanel
+            session={session}
+            currentQuestion={currentQuestion}
+            messages={messages}
+            answer={answer}
+            onAnswerChange={setAnswer}
+            onSubmit={handleSubmitAnswer}
+            onCompleteEarly={handleCompleteEarly}
+            isSubmitting={isSubmitting}
+            showCompleteConfirm={showCompleteConfirm}
+            onShowCompleteConfirm={setShowCompleteConfirm}
+          />
+        </motion.div>
+      </div>
 
       {/* 提前交卷确认对话框 */}
       <ConfirmDialog

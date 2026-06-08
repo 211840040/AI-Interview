@@ -1,9 +1,9 @@
-import {useCallback, useEffect, useState} from 'react';
-import {motion} from 'framer-motion';
-import {historyApi, ResumeDetail} from '../api/history';
+import { useCallback, useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { historyApi, ResumeDetail } from '../api/history';
 import AnalysisPanel from '../components/AnalysisPanel';
-import {formatDateOnly} from '../utils/date';
-import {ChevronLeft, ChevronRight, Clock} from 'lucide-react';
+import { formatDateOnly } from '../utils/date';
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import PDFPreviewPanel from '../components/PDFPreviewPanel';
 
 interface ResumeDetailPageProps {
@@ -97,8 +97,8 @@ export default function ResumeDetailPage({ resumeId, onBack }: ResumeDetailPageP
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-          <motion.div
-              className="w-12 h-12 border-4 border-slate-200 dark:border-slate-600 border-t-primary-500 rounded-full"
+        <motion.div
+          className="w-12 h-12 border-4 border-slate-200 dark:border-slate-600 border-t-primary-500 rounded-full"
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
         />
@@ -126,7 +126,7 @@ export default function ResumeDetailPage({ resumeId, onBack }: ResumeDetailPageP
       {/* 顶部导航栏 */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4 shrink-0">
         <div className="flex items-center gap-4">
-            <motion.button
+          <motion.button
             onClick={onBack}
             className="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 transition-all shadow-sm"
             whileHover={{ scale: 1.05 }}
@@ -138,7 +138,7 @@ export default function ResumeDetailPage({ resumeId, onBack }: ResumeDetailPageP
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">{resume.filename}</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
               <Clock className="w-4 h-4" />
-              上传于 {formatDateOnly(resume.uploadedAt)}
+              上传于 {formatDateOnly(resume.uploadedAt)} &nbsp;&nbsp;&nbsp; 左侧可预览简历 PDF
             </p>
           </div>
         </div>
@@ -171,12 +171,17 @@ export default function ResumeDetailPage({ resumeId, onBack }: ResumeDetailPageP
       {resume.storageUrl && !pdfPanelOpen && (
         <motion.button
           onClick={() => setPdfPanelOpen(true)}
-          className="fixed left-64 top-1/2 -translate-y-1/2 z-50 w-7 h-14 bg-white dark:bg-slate-800 border border-l-0 border-slate-200 dark:border-slate-700 rounded-r-md flex items-center justify-center text-slate-400 hover:text-primary-500 transition-colors shadow-sm"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 group cursor-pointer"
+          whileHover={{ x: 4 }}
+          whileTap={{ scale: 0.98 }}
           title="预览简历"
         >
-          <ChevronRight className="w-4 h-4" />
+          <div className="flex items-center gap-1.5 h-12 px-2.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-l-0 border-slate-200 dark:border-slate-700 rounded-r-lg shadow-md transition-all duration-200 group-hover:shadow-lg group-hover:border-primary-300 dark:group-hover:border-primary-600 group-hover:px-3.5">
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary-500 transition-colors shrink-0" />
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 group-hover:text-primary-600 dark:group-hover:text-primary-400 opacity-0 group-hover:opacity-100 transition-all duration-200 max-w-0 group-hover:max-w-[5rem] overflow-hidden whitespace-nowrap">
+              预览简历
+            </span>
+          </div>
         </motion.button>
       )}
     </motion.div>

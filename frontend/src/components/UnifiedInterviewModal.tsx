@@ -48,7 +48,7 @@ export default function UnifiedInterviewModal({
   defaultResumeId,
   hideModeSwitch = false,
   title = '开始模拟面试',
-  subtitle = '选择面试模式和主题，快速开始',
+  subtitle = '选择面试模式与方向，AI 将为你生成定制题目',
   startButtonText = '开始面试',
 }: UnifiedInterviewModalProps) {
   const config = useInterviewConfig({ defaultMode, defaultResumeId, autoLoad: false });
@@ -149,14 +149,14 @@ export default function UnifiedInterviewModal({
                           value: 'text' as InterviewMode,
                           label: '文字面试',
                           icon: FileText,
-                          desc: '推荐：更稳定，更适合系统化练习',
-                          recommended: true,
+                          desc: '推荐：文字作答，节奏自主掌控，适合深度思考',
+                          recommended: false,
                         },
                         {
                           value: 'voice' as InterviewMode,
                           label: '语音面试',
                           icon: Mic,
-                          desc: '实时语音对话，偏临场模拟',
+                          desc: '语音对话，还原真实面试场景，锻炼临场反应',
                           recommended: false,
                         },
                       ]).map(opt => {
@@ -217,9 +217,8 @@ export default function UnifiedInterviewModal({
                                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                           >
-                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${
-                              selected ? skill.display?.iconBg || 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
-                            }`}>
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${selected ? skill.display?.iconBg || 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
+                              }`}>
                               {IconComponent
                                 ? <IconComponent className={`w-5 h-5 ${selected ? (skill.display?.iconColor || 'text-primary-600') : 'text-slate-500 dark:text-slate-400'}`} />
                                 : <span className={selected ? (skill.display?.iconColor || 'text-primary-600') : ''}>{fallbackEmoji}</span>
@@ -245,9 +244,8 @@ export default function UnifiedInterviewModal({
                             : 'border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600'
                           }`}
                       >
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          config.isCustomSkill ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
-                        }`}>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${config.isCustomSkill ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
+                          }`}>
                           {(() => {
                             const CustomIcon = getSkillIcon(CUSTOM_SKILL_ID);
                             return CustomIcon

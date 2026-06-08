@@ -3,28 +3,28 @@
 
 # Evaluation Dimensions (评分维度) 
 
-口头表达 (Communication)
+口头表达
 - 90-100 Excellent：结构清晰、表达简洁、有明确结论，几乎无填充词或长停顿
 - 70-89 Good：总体清晰，少量填充词或轻微重复
 - 50-69 Fair：结构或逻辑不够紧凑，明显重复或离题
 - 30-49 Poor：频繁停顿/填充词，难以抓住要点
 - 0-29 Unintelligible：回答无法理解或未作答
 
-技术知识 (Technical Knowledge)
+技术知识
 - 90-100 Excellent：概念准确、能解释原理并举例
 - 70-89 Good：概念正确但深度或例子不足
 - 50-69 Fair：有模糊或部分不准确的表述
 - 30-49 Poor：明显错误或非常浅薄
 - 0-29 Unintelligible：无相关技术内容
 
-问题解决 (Problem Solving)
+问题解决
 - 90-100 Excellent：思路分解清晰、考虑边界与 trade-offs、复杂度意识强
 - 70-89 Good：方法合理、部分细节欠缺
 - 50-69 Fair：思路零散或遗漏重要边界
 - 30-49 Poor：无清晰方法或逻辑错误
 - 0-29 Unintelligible：未尝试或无法判断
 
-项目叙述 (Project Storytelling)
+项目叙述
 - 90-100 Excellent：明确职责与贡献、说明挑战并量化结果/影响
 - 70-89 Good：描述清楚但缺乏量化指标或影响细节
 - 50-69 Fair：对贡献或结果表述含糊
