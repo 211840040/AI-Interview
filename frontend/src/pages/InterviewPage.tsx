@@ -270,7 +270,7 @@ export default function Interview({
             transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           />
           <p className="text-slate-500 dark:text-slate-400 font-medium">正在生成面试题目...</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">AI 正在根据配置准备个性化题目</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">AI 正在为你量身定制面试题目，请稍候...</p>
         </div>
       </div>
     );

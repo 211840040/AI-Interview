@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
+import { Clock, PhoneOff, AlertCircle, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
+import femaleAvatar from '../assets/female.png';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
 import RealtimeSubtitle from '../components/RealtimeSubtitle';
@@ -691,7 +692,7 @@ export default function VoiceInterviewPage() {
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请从面试记录或"语音面试"入口开始</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请通过「模拟面试」页面选择语音模式开始</p>
           <button
             onClick={handleCloseModal}
             className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
@@ -843,19 +844,36 @@ export default function VoiceInterviewPage() {
               </AnimatePresence>
 
               {/* Avatar */}
-              <motion.div
-                animate={isAiSpeaking ? {
-                  scale: [1, 1.08, 1],
-                  transition: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' },
-                } : {}}
-                className={`relative z-10 w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 ${
-                  isAiSpeaking
-                    ? 'bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 shadow-xl shadow-primary-500/30'
-                    : 'bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-600 dark:to-slate-700 shadow-lg'
-                }`}
-              >
-                <Bot className={`w-14 h-14 ${isAiSpeaking ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
-              </motion.div>
+              <div className="relative w-[280px] h-[280px]">
+                {/* 说话时光效 */}
+                {isAiSpeaking && (
+                  <motion.div
+                    className="absolute inset-0 rounded-full"
+                    animate={{
+                      boxShadow: [
+                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
+                        '0 0 60px 20px rgba(16,185,129,0.4), 0 0 100px 40px rgba(16,185,129,0.2)',
+                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
+                      ],
+                      scale: [1, 1.05, 1],
+                      transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+                    }}
+                  />
+                )}
+                <motion.div
+                  animate={isAiSpeaking ? {
+                    scale: [1, 1.03, 1],
+                    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+                  } : {}}
+                  className={`relative z-10 w-full h-full rounded-full flex items-center justify-center transition-all duration-500 overflow-hidden ${
+                    isAiSpeaking
+                      ? 'ring-4 ring-primary-300/60 shadow-2xl shadow-primary-400/30'
+                      : 'ring-2 ring-slate-200 dark:ring-slate-600 shadow-xl'
+                  }`}
+                >
+                  <img src={femaleAvatar} alt="面试官" className="w-full h-full rounded-full object-cover" />
+                </motion.div>
+              </div>
 
               {/* Question text below avatar */}
               <div className="relative z-10 w-full max-w-lg mt-5 min-h-[56px]">

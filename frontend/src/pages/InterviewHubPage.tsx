@@ -216,7 +216,7 @@ export default function InterviewHubPage() {
           <Sparkles className="w-7 h-7 text-primary-500" />
           模拟面试
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">配置面试参数，快速开始练习</p>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">选择方向和难度，AI 将为你生成贴合岗位的面试题</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -243,11 +243,11 @@ export default function InterviewHubPage() {
             </div>
             <ul className="space-y-3">
               {[
-                { step: '1', text: '选择面试模式（文字或语音）' },
-                { step: '2', text: '选择面试方向或填写自定义 JD' },
-                { step: '3', text: '设置难度等级与题目数量' },
-                { step: '4', text: '可选：关联简历获取个性化提问' },
-                { step: '5', text: '点击底部按钮开始面试' },
+                { step: '1', text: '请选择面试模式：文字作答或语音对话' },
+                { step: '2', text: '请选择面试方向，或粘贴 JD 让 AI 为你定制' },
+                { step: '3', text: '设置难度等级与题目/时长数量' },
+                { step: '4', text: '可选：关联已有简历获得个性化提问' },
+                { step: '5', text: '确认无误后，点击底部按钮开始面试' },
               ].map(item => (
                 <li key={item.step} className="flex items-start gap-2.5">
                   <span className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">
@@ -266,7 +266,7 @@ export default function InterviewHubPage() {
               <h2 className="text-base font-bold text-slate-800 dark:text-white">音频检测</h2>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-              开始语音面试前，请确认麦克风和扬声器正常工作。
+              语音面试需要麦克风和扬声器权限，建议提前检测以确保流程顺畅
             </p>
 
             {/* 麦克风检测 */}
@@ -278,13 +278,12 @@ export default function InterviewHubPage() {
               <button
                 onClick={testMicrophone}
                 disabled={micStatus === 'testing'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  micStatus === 'ok'
-                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                    : micStatus === 'fail'
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${micStatus === 'ok'
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                  : micStatus === 'fail'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                  }`}
               >
                 {micStatus === 'testing' ? (
                   <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> 检测中</span>
@@ -311,13 +310,12 @@ export default function InterviewHubPage() {
               <button
                 onClick={testSpeaker}
                 disabled={speakerStatus === 'testing'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  speakerStatus === 'ok'
-                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                    : speakerStatus === 'fail'
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${speakerStatus === 'ok'
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                  : speakerStatus === 'fail'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                  }`}
               >
                 {speakerStatus === 'testing' ? (
                   <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> 检测中</span>
@@ -367,14 +365,14 @@ export default function InterviewHubPage() {
                     <div className="min-w-0">
                       <p className={`font-semibold text-sm flex items-center gap-2 ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
                         <span>{opt.label}</span>
-                        {opt.recommended && (
+                        {/* {opt.recommended && (
                           <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                             推荐
                           </span>
-                        )}
+                        )} */}
                       </p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">
-                        {opt.value === 'text' ? '更稳定，适合系统化刷题与复盘' : '实时语音对话，偏临场模拟'}
+                        {opt.value === 'text' ? '文字作答，节奏自主掌控，适合深度思考' : '语音对话，还原真实场景，锻炼临场反应'}
                       </p>
                     </div>
                   </button>
@@ -385,253 +383,252 @@ export default function InterviewHubPage() {
 
           {/* === 卡片2: 面试方向 === */}
           {activeStep >= STEP.DIRECTION && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-5 mb-4"
-          >
-            <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-xs font-bold">2</span>
-              面试方向
-            </label>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-5 mb-4"
+            >
+              <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-xs font-bold">2</span>
+                面试方向
+              </label>
 
-            {config.loadingSkills ? (
-              <div className="flex items-center gap-2 py-4 text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">加载中...</span>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {config.skills.filter(s => !EXCLUDED_SKILLS.has(s.id)).map(skill => {
-                    const selected = pickedSkill === skill.id;
-                    const IconComponent = getSkillIcon(skill.id);
-                    const DirectionIcon = getDirectionIcon(skill.id);
-                    const fallbackEmoji = skill.display?.icon || '📋';
-                    return (
-                      <button
-                        key={skill.id}
-                        onClick={() => handleSkillSelect(skill.id)}
-                        className={`relative flex items-center gap-2.5 p-3 rounded-xl border-2 transition-all duration-200 text-left
+              {config.loadingSkills ? (
+                <div className="flex items-center gap-2 py-4 text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">加载中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {config.skills.filter(s => !EXCLUDED_SKILLS.has(s.id)).map(skill => {
+                      const selected = pickedSkill === skill.id;
+                      const IconComponent = getSkillIcon(skill.id);
+                      const DirectionIcon = getDirectionIcon(skill.id);
+                      const fallbackEmoji = skill.display?.icon || '📋';
+                      return (
+                        <button
+                          key={skill.id}
+                          onClick={() => handleSkillSelect(skill.id)}
+                          className={`relative flex items-center gap-2.5 p-3 rounded-xl border-2 transition-all duration-200 text-left
                           ${selected
-                            ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 ring-2 ring-primary-500/20'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                          }`}
-                      >
-                        {selected && (
-                          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary-500 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        )}
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${
-                          selected
+                              ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20 ring-2 ring-primary-500/20'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                            }`}
+                        >
+                          {selected && (
+                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary-500 flex items-center justify-center">
+                              <Check className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${selected
                             ? (skill.display?.iconBg || SKILL_COLORS[skill.id]?.bg || 'bg-primary-100 dark:bg-primary-900/50')
                             : (SKILL_COLORS[skill.id]?.lightBg || 'bg-slate-100 dark:bg-slate-700')
-                        }`}>
-                          {DirectionIcon ? (
-                            <DirectionIcon className={`w-4 h-4 ${selected ? (skill.display?.iconColor || SKILL_COLORS[skill.id]?.color || 'text-primary-600') : (SKILL_COLORS[skill.id]?.lightColor || 'text-slate-500 dark:text-slate-400')}`} />
-                          ) : IconComponent ? (
-                            <IconComponent className={`w-4 h-4 ${selected ? (skill.display?.iconColor || SKILL_COLORS[skill.id]?.color || 'text-primary-600') : (SKILL_COLORS[skill.id]?.lightColor || 'text-slate-500 dark:text-slate-400')}`} />
-                          ) : (
-                            <span className={selected ? (skill.display?.iconColor || 'text-primary-600') : ''}>{fallbackEmoji}</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-xs font-medium block truncate ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                            {skill.name}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 自定义 JD */}
-                <div className="mt-3">
-                  {pickedSkill !== CUSTOM_SKILL_ID ? (
-                    <button
-                      onClick={() => handleSkillSelect(CUSTOM_SKILL_ID)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-all text-left"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                      </div>
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                        点击填写专属职位描述（自定义 JD）
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="rounded-xl border-2 border-primary-500/50 bg-primary-50/80 dark:bg-primary-900/20 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-primary-500" />
-                          <span className="text-xs font-semibold text-primary-700 dark:text-primary-300">自定义 JD</span>
-                        </div>
-                        <button
-                          onClick={() => handleSkillSelect(DEFAULT_SKILL_ID)}
-                          className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                        >
-                          取消
+                            }`}>
+                            {DirectionIcon ? (
+                              <DirectionIcon className={`w-4 h-4 ${selected ? (skill.display?.iconColor || SKILL_COLORS[skill.id]?.color || 'text-primary-600') : (SKILL_COLORS[skill.id]?.lightColor || 'text-slate-500 dark:text-slate-400')}`} />
+                            ) : IconComponent ? (
+                              <IconComponent className={`w-4 h-4 ${selected ? (skill.display?.iconColor || SKILL_COLORS[skill.id]?.color || 'text-primary-600') : (SKILL_COLORS[skill.id]?.lightColor || 'text-slate-500 dark:text-slate-400')}`} />
+                            ) : (
+                              <span className={selected ? (skill.display?.iconColor || 'text-primary-600') : ''}>{fallbackEmoji}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className={`text-xs font-medium block truncate ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                              {skill.name}
+                            </span>
+                          </div>
                         </button>
-                      </div>
-                      <textarea
-                        value={config.customJdText}
-                        onChange={e => config.setCustomJdText(e.target.value)}
-                        placeholder="粘贴目标岗位的职位描述（JD），至少 50 字..."
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700
+                      );
+                    })}
+                  </div>
+
+                  {/* 自定义 JD */}
+                  <div className="mt-3">
+                    {pickedSkill !== CUSTOM_SKILL_ID ? (
+                      <button
+                        onClick={() => handleSkillSelect(CUSTOM_SKILL_ID)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                          <Sparkles className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                        </div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                          点击填写专属职位描述（自定义 JD）
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="rounded-xl border-2 border-primary-500/50 bg-primary-50/80 dark:bg-primary-900/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-primary-500" />
+                            <span className="text-xs font-semibold text-primary-700 dark:text-primary-300">自定义 JD</span>
+                          </div>
+                          <button
+                            onClick={() => handleSkillSelect(DEFAULT_SKILL_ID)}
+                            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                          >
+                            取消
+                          </button>
+                        </div>
+                        <textarea
+                          value={config.customJdText}
+                          onChange={e => config.setCustomJdText(e.target.value)}
+                          placeholder="粘贴目标岗位的职位描述（JD），至少 50 字..."
+                          rows={3}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700
                           bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white
                           placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2
                           focus:ring-primary-500/50 focus:border-primary-400 transition-shadow"
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={config.handleParseJd}
-                          disabled={config.parsingJd || !config.customJdText}
-                          className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={config.handleParseJd}
+                            disabled={config.parsingJd || !config.customJdText}
+                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg
                             bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50
                             disabled:cursor-not-allowed transition-colors"
-                        >
-                          {config.parsingJd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                          解析面试方向
-                        </button>
+                          >
+                            {config.parsingJd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            解析面试方向
+                          </button>
+                          {config.customCategories.length > 0 && (
+                            <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                              已解析 {config.customCategories.length} 个方向
+                            </span>
+                          )}
+                        </div>
                         {config.customCategories.length > 0 && (
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                            已解析 {config.customCategories.length} 个方向
-                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {config.customCategories.map((cat, i) => (
+                              <span
+                                key={i}
+                                className="px-2.5 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
+                              >
+                                {cat.label}
+                                <span className="ml-1 text-[10px] text-primary-500">({cat.priority})</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {config.jdNeedsReparse && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            JD 已修改，请重新解析后再开始面试。
+                          </p>
                         )}
                       </div>
-                      {config.customCategories.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {config.customCategories.map((cat, i) => (
-                            <span
-                              key={i}
-                              className="px-2.5 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
-                            >
-                              {cat.label}
-                              <span className="ml-1 text-[10px] text-primary-500">({cat.priority})</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {config.jdNeedsReparse && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">
-                          JD 已修改，请重新解析后再开始面试。
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </motion.div>
+                    )}
+                  </div>
+                </>
+              )}
+            </motion.div>
           )}
 
           {/* === 卡片3: 难度与配置 === */}
           {pickedSkill !== null && activeStep >= STEP.CONFIG && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-5 mb-4"
-          >
-            <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-xs font-bold">3</span>
-              难度与配置
-            </label>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-5 mb-4"
+            >
+              <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-xs font-bold">3</span>
+                难度与配置
+              </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">难度等级</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {DIFFICULTY_OPTIONS.map(opt => {
-                    const selected = pickedDifficulty === opt.value;
-                    const colors = opt.value === 'junior'
-                      ? { border: 'border-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', ring: 'ring-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-300', lightBorder: 'border-emerald-200 dark:border-emerald-800/40', lightText: 'text-emerald-600 dark:text-emerald-400' }
-                      : opt.value === 'mid'
-                        ? { border: 'border-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', ring: 'ring-amber-500/20', text: 'text-amber-700 dark:text-amber-300', lightBorder: 'border-amber-200 dark:border-amber-800/40', lightText: 'text-amber-600 dark:text-amber-400' }
-                        : { border: 'border-red-500', bg: 'bg-red-50 dark:bg-red-900/20', ring: 'ring-red-500/20', text: 'text-red-700 dark:text-red-300', lightBorder: 'border-red-200 dark:border-red-800/40', lightText: 'text-red-600 dark:text-red-400' };
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => handleDifficultySelect(opt.value)}
-                        className={`py-2.5 px-3 rounded-xl border-2 transition-all duration-200 text-center
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">难度等级</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DIFFICULTY_OPTIONS.map(opt => {
+                      const selected = pickedDifficulty === opt.value;
+                      const colors = opt.value === 'junior'
+                        ? { border: 'border-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', ring: 'ring-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-300', lightBorder: 'border-emerald-200 dark:border-emerald-800/40', lightText: 'text-emerald-600 dark:text-emerald-400' }
+                        : opt.value === 'mid'
+                          ? { border: 'border-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', ring: 'ring-amber-500/20', text: 'text-amber-700 dark:text-amber-300', lightBorder: 'border-amber-200 dark:border-amber-800/40', lightText: 'text-amber-600 dark:text-amber-400' }
+                          : { border: 'border-red-500', bg: 'bg-red-50 dark:bg-red-900/20', ring: 'ring-red-500/20', text: 'text-red-700 dark:text-red-300', lightBorder: 'border-red-200 dark:border-red-800/40', lightText: 'text-red-600 dark:text-red-400' };
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleDifficultySelect(opt.value)}
+                          className={`py-2.5 px-3 rounded-xl border-2 transition-all duration-200 text-center
                           ${selected
-                            ? `${colors.border} ${colors.bg} ring-2 ${colors.ring}`
-                            : `${colors.lightBorder} ${colors.bg} hover:opacity-80`
-                          }`}
-                      >
-                        <p className={`text-sm font-semibold ${selected ? colors.text : colors.lightText}`}>
-                          {opt.label}
-                        </p>
-                        <p className={`text-[11px] ${selected ? colors.text : 'text-slate-400'}`}>{opt.desc}</p>
-                      </button>
-                    );
-                  })}
+                              ? `${colors.border} ${colors.bg} ring-2 ${colors.ring}`
+                              : `${colors.lightBorder} ${colors.bg} hover:opacity-80`
+                            }`}
+                        >
+                          <p className={`text-sm font-semibold ${selected ? colors.text : colors.lightText}`}>
+                            {opt.label}
+                          </p>
+                          <p className={`text-[11px] ${selected ? colors.text : 'text-slate-400'}`}>{opt.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                  {pickedMode === 'text' ? '题目数量' : '面试时长'}
-                </p>
-                <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 px-4 flex items-center h-[46px]">
-                  <span className="text-lg font-bold tabular-nums text-primary-600 dark:text-primary-400 w-12 flex-shrink-0">
-                    {pickedMode === 'text' ? config.questionCount : config.plannedDuration}
-                    <span className="text-xs font-normal text-slate-400 ml-0.5">
-                      {pickedMode === 'text' ? '题' : 'min'}
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                    {pickedMode === 'text' ? '题目数量' : '面试时长'}
+                  </p>
+                  <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 px-4 flex items-center h-[46px]">
+                    <span className="text-lg font-bold tabular-nums text-primary-600 dark:text-primary-400 w-12 flex-shrink-0">
+                      {pickedMode === 'text' ? config.questionCount : config.plannedDuration}
+                      <span className="text-xs font-normal text-slate-400 ml-0.5">
+                        {pickedMode === 'text' ? '题' : 'min'}
+                      </span>
                     </span>
-                  </span>
-                  <input
-                    type="range"
-                    min={pickedMode === 'text' ? 3 : 15}
-                    max={pickedMode === 'text' ? 12 : 60}
-                    step={pickedMode === 'text' ? 1 : 5}
-                    value={pickedMode === 'text' ? config.questionCount : config.plannedDuration}
-                    onChange={e => {
-                      const v = parseInt(e.target.value);
-                      if (pickedMode === 'text') config.setQuestionCount(v);
-                      else config.setPlannedDuration(v);
-                    }}
-                    className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer mx-3
+                    <input
+                      type="range"
+                      min={pickedMode === 'text' ? 3 : 15}
+                      max={pickedMode === 'text' ? 12 : 60}
+                      step={pickedMode === 'text' ? 1 : 5}
+                      value={pickedMode === 'text' ? config.questionCount : config.plannedDuration}
+                      onChange={e => {
+                        const v = parseInt(e.target.value);
+                        if (pickedMode === 'text') config.setQuestionCount(v);
+                        else config.setPlannedDuration(v);
+                      }}
+                      className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer mx-3
                       [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4
                       [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
                       [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer
                       [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:shadow-primary-500/30"
-                  />
-                  <span className="text-xs text-slate-400 w-8 text-right flex-shrink-0">
-                    {pickedMode === 'text' ? '12题' : '60min'}
-                  </span>
+                    />
+                    <span className="text-xs text-slate-400 w-8 text-right flex-shrink-0">
+                      {pickedMode === 'text' ? '12题' : '60min'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* 简历选择 */}
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-              <div className="flex items-center gap-3">
-                <FileStack className="w-4 h-4 text-slate-400" />
-                <select
-                  value={config.resumeId || ''}
-                  onChange={e => config.setResumeId(e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700
+              {/* 简历选择 */}
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center gap-3">
+                  <FileStack className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={config.resumeId || ''}
+                    onChange={e => config.setResumeId(e.target.value ? parseInt(e.target.value) : undefined)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700
                     bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white
                     focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-shadow"
-                >
-                  <option value="">不使用简历（通用提问）</option>
-                  {config.resumes.map(r => (
-                    <option key={r.id} value={r.id}>{r.filename}</option>
-                  ))}
-                </select>
-                <Link
-                  to="/history"
-                  className="text-xs text-primary-500 hover:text-primary-600 font-medium whitespace-nowrap transition-colors flex-shrink-0"
-                >
-                  管理简历→
-                </Link>
+                  >
+                    <option value="">不使用简历（通用提问）</option>
+                    {config.resumes.map(r => (
+                      <option key={r.id} value={r.id}>{r.filename}</option>
+                    ))}
+                  </select>
+                  <Link
+                    to="/history"
+                    className="text-xs text-primary-500 hover:text-primary-600 font-medium whitespace-nowrap transition-colors flex-shrink-0"
+                  >
+                    管理简历→
+                  </Link>
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
           )}
         </div>
       </div>

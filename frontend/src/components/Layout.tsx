@@ -1,9 +1,9 @@
-import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
-import {motion} from 'framer-motion';
-import {BookOpen, FileStack, Moon, Sparkles, Sun, Users} from 'lucide-react';
-import {useTheme} from '../hooks/useTheme';
-import {useState} from 'react';
-import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { BookOpen, FileStack, Moon, Sparkles, Sun, Users } from 'lucide-react';
+import { useTheme } from '../hooks/useTheme';
+import { useState } from 'react';
+import UnifiedInterviewModal, { UnifiedInterviewConfig } from './UnifiedInterviewModal';
 
 interface NavItem {
   id: string;
@@ -15,7 +15,7 @@ interface NavItem {
 export default function Layout() {
   const location = useLocation();
   const currentPath = location.pathname;
-  const {theme, toggleTheme} = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [interviewModalPreset, setInterviewModalPreset] = useState<{
     defaultMode: 'text' | 'voice';
@@ -101,7 +101,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 dark:from-slate-900 dark:to-slate-800">
       {/* 顶部导航栏 — 毛玻璃效果 */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -111,7 +111,7 @@ export default function Layout() {
               <Sparkles className="w-4 h-4" />
             </div>
             <span className="text-base font-bold text-slate-800 dark:text-white tracking-tight hidden sm:block">
-              AI Interview
+              AIvuer - AI 智能面试助手
             </span>
           </Link>
 
@@ -183,7 +183,7 @@ export default function Layout() {
         defaultResumeId={interviewModalPreset?.defaultResumeId}
         hideModeSwitch={interviewModalPreset?.defaultResumeId == null}
         title={interviewModalPreset?.title || '开始模拟面试'}
-        subtitle={interviewModalPreset?.subtitle || '选择面试模式和主题，快速开始'}
+        subtitle={interviewModalPreset?.subtitle || '选择面试模式与方向，AI 将为你生成定制题目'}
         startButtonText={interviewModalPreset?.startButtonText || '开始面试'}
       />
     </div>

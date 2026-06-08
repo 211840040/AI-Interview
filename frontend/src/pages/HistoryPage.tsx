@@ -201,7 +201,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
             <FileStack className="w-7 h-7 text-primary-500" />
             简历管理
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">管理您的简历，AI 智能分析与评分</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">上传简历即可获得 AI 智能分析，快速定位核心竞争力</p>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
         >
           <div className="text-6xl mb-6">📄</div>
           <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无简历记录</h3>
-          <p className="text-slate-500 dark:text-slate-400">上传简历开始您的第一次 AI 面试分析</p>
+          <p className="text-slate-500 dark:text-slate-400">还没有简历？上传一份简历，开启 AI 智能分析之旅</p>
         </motion.div>
       )}
 

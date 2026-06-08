@@ -579,7 +579,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            查看你的面试详情，分析面试表现趋势，并获取你的个性化提升建议
+            回顾面试过程，追踪成长轨迹，发现提升空间
           </motion.p>
         </div>
 
@@ -614,7 +614,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
             </h2>
             <div className="flex items-center gap-3 text-sm">
               <span className="text-slate-500 dark:text-slate-400">
-                总平均: <strong className="text-indigo-600 dark:text-indigo-400">{filteredStats ? (filteredStats.averageScore !== null ? `${filteredStats.averageScore}分` : '-') : '-'}</strong>
+                总平均: <strong className="text-primary-600 dark:text-primary-400">{filteredStats ? (filteredStats.averageScore !== null ? `${filteredStats.averageScore}分` : '-') : '-'}</strong>
               </span>
               <span className="text-slate-300 dark:text-slate-600">|</span>
               <span className="text-slate-500 dark:text-slate-400">
@@ -820,7 +820,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         >
           <Users className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无面试记录</h3>
-          <p className="text-slate-500 dark:text-slate-400">开始一次模拟面试后，记录将显示在这里</p>
+          <p className="text-slate-500 dark:text-slate-400">完成一次模拟面试后，成绩与评估报告将汇集于此</p>
         </motion.div>
       )}
 
