@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Clock, PhoneOff, AlertCircle, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
-import femaleAvatar from '../assets/female.png';
+import VideoAvatar from '../components/VideoAvatar';
+import defaultBgVideo from '../assets/bg_video.mp4?url';
+console.log('Video path:', defaultBgVideo); // 检查打包后的路径
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
 import RealtimeSubtitle from '../components/RealtimeSubtitle';
@@ -46,7 +48,7 @@ export default function VoiceInterviewPage() {
   const urlDifficulty = queryParams.get('difficulty') || undefined;
   const urlDuration = Number(queryParams.get('duration') || queryParams.get('plannedDuration'));
   const queryVoiceConfig: VoiceConfig | undefined = urlSkillId
-    ? {
+      ? {
         skillId: urlSkillId,
         difficulty: urlDifficulty,
         techEnabled: true,
@@ -54,7 +56,7 @@ export default function VoiceInterviewPage() {
         hrEnabled: true,
         plannedDuration: Number.isFinite(urlDuration) && urlDuration > 0 ? urlDuration : 15,
       }
-    : undefined;
+      : undefined;
   const presetVoiceConfig = entryState.voiceConfig ?? queryVoiceConfig;
   const effectiveSkillId = presetVoiceConfig?.skillId ?? urlSkillId ?? 'java-backend';
 
@@ -64,10 +66,9 @@ export default function VoiceInterviewPage() {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
   const [userText, setUserText] = useState('');
-  const [aiText, setAiText] = useState('');
+  const [aiText, setAiText] = useState('');           // 实时字幕
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string; id: string }[]>([]);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
-  const [aiAudio, setAiAudio] = useState('');
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState<string>('');
@@ -79,24 +80,41 @@ export default function VoiceInterviewPage() {
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<VoiceInterviewWebSocket | null>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement>(null);
   const autoStartRef = useRef(false);
   const endedByUserRef = useRef(false);
   const isAiSpeakingRef = useRef(false);
   const isAsrReadyRef = useRef(false);
   const isSubmittingRef = useRef(false);
-  const aiAudioPendingRef = useRef(false);
   const lastAiCommittedTextRef = useRef('');
-  const pendingAiTextCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioPlaybackWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Chunked audio playback refs
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const chunkQueueRef = useRef<AudioBuffer[]>([]);
-  const isChunkPlayingRef = useRef(false);
-  const chunkPlaybackSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const drainCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Ref to track latest aiText for async callbacks (avoids stale closure)
-  const aiTextRef = useRef('');
+  const aiTextRef = useRef('');        // 用于保存最新字幕，供视频结束回调使用
+  const pendingAiCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 视频相关
+  const [dynamicVideoSrc, setDynamicVideoSrc] = useState<string | null>(null);
+  const activeVideoRequestRef = useRef<AbortController | null>(null);
+  const chunkedPcmBuffersRef = useRef<Float32Array[]>([]);
+
+  // 在现有 ref 定义区域附近添加
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (wsRef.current?.isConnected()) {
+        // 发送心跳消息，具体 action 可根据后端要求调整，这里使用 'ping'
+        wsRef.current.sendControl('ping', { timestamp: Date.now() });
+        console.log('[Heartbeat] sent');
+      }
+    }, 15000); // 15秒发送一次，小于服务端超时阈值
+  }, []);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
   useEffect(() => { aiTextRef.current = aiText; }, [aiText]);
   useEffect(() => { isAsrReadyRef.current = isAsrReady; }, [isAsrReady]);
   useEffect(() => { isSubmittingRef.current = isSubmitting; }, [isSubmitting]);
@@ -106,906 +124,478 @@ export default function VoiceInterviewPage() {
     setIsAiSpeaking(value);
   }, []);
 
-  const clearPendingAiTextCommit = useCallback(() => {
-    if (pendingAiTextCommitRef.current) {
-      clearTimeout(pendingAiTextCommitRef.current);
-      pendingAiTextCommitRef.current = null;
-    }
-  }, []);
-
-  const clearAudioPlaybackWatchdog = useCallback(() => {
-    if (audioPlaybackWatchdogRef.current) {
-      clearTimeout(audioPlaybackWatchdogRef.current);
-      audioPlaybackWatchdogRef.current = null;
-    }
-  }, []);
-
-  const commitAiMessage = useCallback((rawText: string) => {
-    const normalized = (rawText || '').trim();
-    if (!normalized || normalized === lastAiCommittedTextRef.current) {
-      return;
-    }
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'ai' && last.text.trim() === normalized) {
-        return prev;
-      }
-      return [
-        ...prev,
-        { role: 'ai', text: normalized, id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
-      ];
-    });
-    lastAiCommittedTextRef.current = normalized;
-    setAiText(prev => prev?.trim() === normalized ? '' : prev);
-  }, []);
-
-  const estimateWavDurationMs = useCallback((base64Wav: string) => {
-    try {
-      const binary = atob(base64Wav.slice(0, 128));
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      if (bytes.length < 44) {
-        return 15_000;
-      }
-      const view = new DataView(bytes.buffer);
-      const byteRate = view.getUint32(28, true);
-      const dataSize = view.getUint32(40, true);
-      if (byteRate <= 0 || dataSize <= 0) {
-        return 15_000;
-      }
-      return Math.ceil((dataSize / byteRate) * 1000);
-    } catch {
-      return 15_000;
-    }
-  }, []);
-
   const finishAiPlayback = useCallback(() => {
-    aiAudioPendingRef.current = false;
-    clearAudioPlaybackWatchdog();
+    console.log('[finishAiPlayback] 开始执行');
     setAiSpeaking(false);
     setIsSubmitting(false);
-    clearPendingAiTextCommit();
-    commitAiMessage(aiTextRef.current.trim());
-    setAiText('');
-    setAiAudio('');
-  }, [clearAudioPlaybackWatchdog, clearPendingAiTextCommit, commitAiMessage, setAiSpeaking]);
-
-  // --- Chunked audio playback via AudioContext ---
-  const getAudioContext = useCallback(() => {
-    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-      audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+    isAiSpeakingRef.current = false;
+    isSubmittingRef.current = false;
+    if (pendingAiCommitRef.current) {
+      clearTimeout(pendingAiCommitRef.current);
+      pendingAiCommitRef.current = null;
     }
-    return audioContextRef.current;
+    chunkedPcmBuffersRef.current = [];
+    const finalText = aiTextRef.current.trim();
+    if (finalText && finalText !== lastAiCommittedTextRef.current) {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'ai' && last.text.trim() === finalText) return prev;
+        return [...prev, { role: 'ai', text: finalText, id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }];
+      });
+      lastAiCommittedTextRef.current = finalText;
+    }
+    setAiText('');
+    setIsAsrReady(true);   // 恢复 ASR 就绪
+    stopHeartbeat();       // 停止心跳
+    console.log('[finishAiPlayback] 完成');
+  }, [setAiSpeaking, setIsSubmitting, setIsAsrReady, stopHeartbeat]);
+
+  // 合并分块 PCM 为 WAV base64
+  const mergeChunksToWavBase64 = useCallback(async (chunks: Float32Array[]): Promise<string> => {
+    if (!chunks.length) return '';
+    let totalLength = 0;
+    for (const chunk of chunks) totalLength += chunk.length;
+    const combined = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
+    const sampleRate = 24000;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const bytesPerSample = bitsPerSample / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataSize = combined.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    const writeString = (view: DataView, offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    let offsetBytes = 44;
+    for (let i = 0; i < combined.length; i++) {
+      const sample = Math.max(-1, Math.min(1, combined[i]));
+      const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offsetBytes, int16, true);
+      offsetBytes += 2;
+    }
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1] || '');
+      reader.readAsDataURL(blob);
+    });
   }, []);
 
-  const playNextChunk = useCallback(() => {
-    if (chunkQueueRef.current.length === 0) {
-      isChunkPlayingRef.current = false;
-      return;
-    }
-    isChunkPlayingRef.current = true;
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-    const buffer = chunkQueueRef.current.shift()!;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    chunkPlaybackSourceRef.current = source;
-    source.onended = () => {
-      chunkPlaybackSourceRef.current = null;
-      playNextChunk();
-    };
-    source.start(0);
-  }, [getAudioContext]);
+  const requestAndPlayVideo = useCallback(async (audioBase64: string, responseText: string) => {
+    // 启动心跳，防止连接空闲断开
+    startHeartbeat();
 
-  const scheduleChunkDrainCompletion = useCallback(() => {
-    const startedAt = Date.now();
-    const maxDrainWaitMs = 30_000;
-    if (drainCheckRef.current) {
-      clearInterval(drainCheckRef.current);
-    }
-    drainCheckRef.current = setInterval(() => {
-      if (chunkQueueRef.current.length === 0 && !isChunkPlayingRef.current) {
-        clearInterval(drainCheckRef.current!);
-        drainCheckRef.current = null;
-        setAiSpeaking(false);
-        setIsSubmitting(false);
-        clearPendingAiTextCommit();
-        commitAiMessage(aiTextRef.current.trim());
-        setAiText('');
-      } else if (Date.now() - startedAt > maxDrainWaitMs) {
-        clearInterval(drainCheckRef.current!);
-        drainCheckRef.current = null;
-        setAiSpeaking(false);
-        setIsSubmitting(false);
+    if (!audioBase64) return;
+    if (activeVideoRequestRef.current) activeVideoRequestRef.current.abort();
+
+    const controller = new AbortController();
+    activeVideoRequestRef.current = controller;
+    try {
+      const response = await fetch('http://localhost:5001/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: audioBase64 }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Generate video failed: ${response.status}`);
+      const data = await response.json();
+      const videoBase64 = data.video;
+      if (!videoBase64) throw new Error('No video data in response');
+      const byteCharacters = atob(videoBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'video/mp4' });
+      const blobUrl = URL.createObjectURL(blob);
+      setDynamicVideoSrc(prev => {
+        if (prev && prev !== defaultBgVideo && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
+      const normalized = responseText.trim();
+      if (normalized) {
+        setAiText(normalized);
+        setAiSpeaking(true);
       }
-    }, 100);
-  }, [clearPendingAiTextCommit, commitAiMessage, setAiSpeaking]);
+    } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      console.error('[VideoGen] Error:', error);
+      if (responseText.trim()) {
+        setAiText(responseText.trim());
+        setAiSpeaking(true);
+        if (pendingAiCommitRef.current) clearTimeout(pendingAiCommitRef.current);
+        pendingAiCommitRef.current = setTimeout(() => finishAiPlayback(), 2500);
+      } else {
+        finishAiPlayback();
+      }
+    } finally {
+      if (activeVideoRequestRef.current === controller) activeVideoRequestRef.current = null;
+      // 视频请求完成，但心跳还需要继续维持直到视频播放结束（视频播放期间也不能断开）
+      // 所以不在 finally 中停止心跳，而是在 finishAiPlayback 中停止
+    }
+  }, [finishAiPlayback, setAiSpeaking, setAiText, startHeartbeat]);
 
+  // 处理分块音频（仅累积数据，不播放）
   const handleAudioChunk = useCallback((base64Wav: string, _index: number, isLast: boolean) => {
     try {
-      aiAudioPendingRef.current = false;
-      clearPendingAiTextCommit();
       const binaryStr = atob(base64Wav);
       const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
       const pcmOffset = 44;
       const pcmData = new Int16Array(bytes.buffer, pcmOffset, (bytes.length - pcmOffset) / 2);
       const float32 = new Float32Array(pcmData.length);
-      for (let i = 0; i < pcmData.length; i++) {
-        float32[i] = pcmData[i] / 32768.0;
-      }
-
-      const ctx = getAudioContext();
-      const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
-      audioBuffer.getChannelData(0).set(float32);
-
-      chunkQueueRef.current.push(audioBuffer);
-      if (!isChunkPlayingRef.current) {
-        playNextChunk();
-      }
-
+      for (let i = 0; i < pcmData.length; i++) float32[i] = pcmData[i] / 32768.0;
+      const copy = new Float32Array(float32.length);
+      copy.set(float32);
+      chunkedPcmBuffersRef.current.push(copy);
       setAiSpeaking(true);
-
       if (isLast) {
-        scheduleChunkDrainCompletion();
+        // 等待 audio_complete 消息触发合并生成
       }
     } catch (e) {
-      console.error('[ChunkAudio] Decode/play error:', e);
+      console.error('[ChunkAudio] Decode error:', e);
     }
-  }, [getAudioContext, playNextChunk, scheduleChunkDrainCompletion, setAiSpeaking]);
+  }, [setAiSpeaking]);
 
-  // Load skills for template name display
+  // 加载技能列表
+  useEffect(() => { skillApi.listSkills().then(setSkills).catch(console.error); }, []);
   useEffect(() => {
-    skillApi.listSkills().then(setSkills).catch(console.error);
-  }, []);
-
-  // Derive template name from skills
-  useEffect(() => {
-    if (skills.length > 0 && effectiveSkillId) {
-      setTemplateName(getTemplateName(effectiveSkillId, skills));
-    }
+    if (skills.length && effectiveSkillId) setTemplateName(getTemplateName(effectiveSkillId, skills));
   }, [skills, effectiveSkillId]);
 
-  // Cleanup on unmount
+  // 清理
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.disconnect();
-      }
-      clearAudioPlaybackWatchdog();
-      chunkPlaybackSourceRef.current?.stop();
-      audioContextRef.current?.close();
-      if (drainCheckRef.current) {
-        clearInterval(drainCheckRef.current);
-        drainCheckRef.current = null;
-      }
-      clearPendingAiTextCommit();
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (wsRef.current) wsRef.current.disconnect();
+      if (pendingAiCommitRef.current) clearTimeout(pendingAiCommitRef.current);
       const currentSessionId = sessionId;
-      if (currentSessionId && !endedByUserRef.current) {
-        voiceInterviewApi.pauseSession(currentSessionId).catch(() => {});
-      }
+      if (currentSessionId && !endedByUserRef.current) voiceInterviewApi.pauseSession(currentSessionId).catch(() => {});
+      // 注意：动态视频 URL 的清理已经在 setDynamicVideoSrc 中手动 revoke，此处无需再 revoke
+      stopHeartbeat();
     };
-  }, [clearAudioPlaybackWatchdog, clearPendingAiTextCommit, sessionId]);
-
-  // Start interview timer
+  }, [sessionId, stopHeartbeat]); // 移除 dynamicVideoSrc 依赖
+  // 计时器
   useEffect(() => {
-    if (sessionId && connectionStatus === 'connected') {
-      startTimer();
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
+    if (sessionId && connectionStatus === 'connected') startTimer();
+    else if (timerRef.current) clearInterval(timerRef.current);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sessionId, connectionStatus]);
 
-  // Auto-play audio when aiAudio changes
-  useEffect(() => {
-    if (aiAudio && audioPlayerRef.current) {
-      const playPromise = audioPlayerRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          setError('请点击页面任意位置以启用音频播放');
-          finishAiPlayback();
-        });
-      }
-    }
-  }, [aiAudio, finishAiPlayback]);
+  const startTimer = () => { timerRef.current = setInterval(() => setCurrentTime(p => p + 1), 1000); };
+  const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+  const getPhaseLabel = (phase: string) => ({ INTRO: '自我介绍', TECH: '技术问题', PROJECT: '项目深挖', HR: 'HR问题' }[phase] || phase);
 
-  const startTimer = () => {
-    timerRef.current = setInterval(() => {
-      setCurrentTime((prev) => prev + 1);
-    }, 1000);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getPhaseLabel = (phase: string) => {
-    const phaseMap: Record<string, string> = {
-      INTRO: '自我介绍',
-      TECH: '技术问题',
-      PROJECT: '项目深挖',
-      HR: 'HR问题',
-    };
-    return phaseMap[phase] || phase;
-  };
-
-  // 手动提交回答
+  // 提交回答
   const handleSubmitAnswer = useCallback(() => {
-    if (!wsRef.current || !wsRef.current.isConnected()) {
-      return;
-    }
-    if (!userText.trim() || isAiSpeakingRef.current || isSubmitting) {
-      return;
-    }
+    if (!wsRef.current?.isConnected()) return;
+    if (!userText.trim() || isAiSpeakingRef.current || isSubmitting) return;
     setIsRecording(false);
     setIsSubmitting(true);
     const text = userText.trim();
-    setMessages(prev => [
-      ...prev,
-      { role: 'user', text, id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
-    ]);
+    setMessages(prev => [...prev, { role: 'user', text, id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }]);
     setUserText('');
     wsRef.current.sendControl('submit', { text });
   }, [userText, isSubmitting]);
 
+  // WebSocket 处理器
   const createWebSocketHandlers = useCallback(() => ({
-    onOpen: () => {
-      setConnectionStatus('connected');
-      setIsAsrReady(false);
-    },
+    onOpen: () => { setConnectionStatus('connected'); setIsAsrReady(false); },
     onMessage: () => {},
     onSubtitle: (text: string, isFinal: boolean) => {
       if (isFinal && text.trim()) {
         setMessages(prev => {
           const last = prev[prev.length - 1];
-          if (last?.role === 'user' && last.text.trim() === text.trim()) {
-            return prev;
-          }
-          return [
-            ...prev,
-            { role: 'user', text: text.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
-          ];
+          if (last?.role === 'user' && last.text.trim() === text.trim()) return prev;
+          return [...prev, { role: 'user', text: text.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }];
         });
         setUserText('');
-      } else {
-        setUserText(text);
-      }
+      } else setUserText(text);
     },
     onAudioResponse: (audioData: string, text: string) => {
-      const hasAudio = !!(audioData && audioData.length > 0);
+      // 清空分块缓存
+      chunkedPcmBuffersRef.current = [];
       const normalized = (text || '').trim();
-      if (hasAudio) {
-        clearPendingAiTextCommit();
-        clearAudioPlaybackWatchdog();
-        aiAudioPendingRef.current = false;
-        setAiAudio(audioData);
+      if (audioData && audioData.length > 0) {
+        requestAndPlayVideo(audioData, normalized);
+      } else if (normalized) {
+        // 没有音频时，延迟提交（模拟视频播放）
         setAiText(normalized);
         setAiSpeaking(true);
-        const duration = estimateWavDurationMs(audioData);
-        audioPlaybackWatchdogRef.current = setTimeout(
-          finishAiPlayback,
-          Math.min(Math.max(duration + 1500, 4000), 60_000)
-        );
-        return;
+        if (pendingAiCommitRef.current) clearTimeout(pendingAiCommitRef.current);
+        pendingAiCommitRef.current = setTimeout(() => finishAiPlayback(), 2500);
       }
-      setAiAudio('');
-      setAiText(normalized);
-      setAiSpeaking(false);
-      if (!normalized) {
-        setIsSubmitting(false);
-        return;
-      }
-      clearPendingAiTextCommit();
-      pendingAiTextCommitRef.current = setTimeout(() => {
-        commitAiMessage(normalized);
-        setIsSubmitting(false);
-        setAiSpeaking(false);
-        pendingAiTextCommitRef.current = null;
-      }, 2500);
     },
-    onTextResponse: (text: string, isFinal: boolean) => {
-      const normalized = (text || '').trim();
-      if (!normalized) {
-        return;
-      }
-      aiAudioPendingRef.current = isFinal;
-      setAiText(normalized);
-      setAiSpeaking(true);
-      if (!isFinal) {
-        return;
-      }
-
-      clearPendingAiTextCommit();
-      pendingAiTextCommitRef.current = setTimeout(() => {
-        if (aiAudioPendingRef.current) {
-          aiAudioPendingRef.current = false;
-        }
-        commitAiMessage(normalized);
-        setIsSubmitting(false);
-        setAiSpeaking(false);
-        pendingAiTextCommitRef.current = null;
-      }, 15000);
+    onTextResponse: (_text: string, _isFinal: boolean) => {
+      // 不使用文本响应，统一由音频响应驱动
     },
     onClose: (event: { code: number }) => {
       setConnectionStatus('disconnected');
       setIsAsrReady(false);
-      clearPendingAiTextCommit();
-      if (event.code !== 1000) {
-        setError('连接已断开，请刷新页面重试');
-      }
+      if (event.code !== 1000) setError('连接已断开，请刷新页面重试');
     },
     onError: () => {
-      clearPendingAiTextCommit();
-      clearAudioPlaybackWatchdog();
       setError('WebSocket 连接错误，请检查网络后重试');
       setConnectionStatus('disconnected');
       setIsAsrReady(false);
     },
-    onAudioChunk: (data: string, index: number, isLast: boolean) => {
-      handleAudioChunk(data, index, isLast);
-    },
+    onAudioChunk: (data: string, index: number, isLast: boolean) => handleAudioChunk(data, index, isLast),
     onControl: (action: string, message?: string) => {
-      if (action === 'asr_ready') {
-        setIsAsrReady(true);
-        setError(null);
-        return;
-      }
-      if (action === 'asr_reconnecting') {
-        setIsAsrReady(false);
-        if (message) {
-          setError(message);
-        }
-        return;
-      }
+      if (action === 'asr_ready') { setIsAsrReady(true); setError(null); return; }
+      if (action === 'asr_reconnecting') { setIsAsrReady(false); if (message) setError(message); return; }
       if (action === 'audio_complete') {
-        scheduleChunkDrainCompletion();
+        (async () => {
+          if (chunkedPcmBuffersRef.current.length === 0) return;
+          try {
+            const wavBase64 = await mergeChunksToWavBase64(chunkedPcmBuffersRef.current);
+            if (wavBase64) {
+              const currentText = aiTextRef.current;
+              await requestAndPlayVideo(wavBase64, currentText);
+            }
+          } catch (err) { console.error('[ChunkAudio] Generate video error', err); }
+          finally { chunkedPcmBuffersRef.current = []; }
+        })();
         return;
       }
-      if (action === 'pause_timeout_warning' && message) {
-        setError(message);
-        return;
-      }
-      if (action === 'pause_timeout' && message) {
-        setError(message);
-        setConnectionStatus('disconnected');
-        setIsAsrReady(false);
-      }
+      if (action === 'pause_timeout_warning' && message) setError(message);
+      if (action === 'pause_timeout' && message) { setError(message); setConnectionStatus('disconnected'); setIsAsrReady(false); }
     },
-    onErrorMessage: (message: string) => {
-      setError(message || '语音面试服务异常，请稍后重试');
-      if (message.includes('语音识别')) {
-        setIsAsrReady(false);
-      }
-    },
-  }), [
-    clearAudioPlaybackWatchdog,
-    clearPendingAiTextCommit,
-    commitAiMessage,
-    estimateWavDurationMs,
-    finishAiPlayback,
-    handleAudioChunk,
-    scheduleChunkDrainCompletion,
-    setAiSpeaking,
-  ]);
+    onErrorMessage: (message: string) => { setError(message || '语音面试服务异常，请稍后重试'); if (message.includes('语音识别')) setIsAsrReady(false); },
+  }), [requestAndPlayVideo, handleAudioChunk, mergeChunksToWavBase64, finishAiPlayback]);
 
   const connectWithHandlers = useCallback((sessionId: number, wsUrl: string) => {
     setIsAsrReady(false);
     setTimeout(() => {
-      try {
-        wsRef.current = connectWebSocket(sessionId, wsUrl, createWebSocketHandlers());
-      } catch (error) {
-        setError('无法建立 WebSocket 连接: ' + (error instanceof Error ? error.message : '未知错误'));
-        setConnectionStatus('disconnected');
-        setIsAsrReady(false);
-      }
+      try { wsRef.current = connectWebSocket(sessionId, wsUrl, createWebSocketHandlers()); }
+      catch (error) { setError('无法建立 WebSocket 连接: ' + (error instanceof Error ? error.message : '未知错误')); setConnectionStatus('disconnected'); setIsAsrReady(false); }
     }, 500);
   }, [createWebSocketHandlers]);
 
-  const handlePhaseConfig = useCallback(async (config: {
-    skillId: string;
-    difficulty?: string;
-    techEnabled: boolean;
-    projectEnabled: boolean;
-    hrEnabled: boolean;
-    plannedDuration: number;
-    resumeId?: number;
-    llmProvider?: string;
-  }) => {
-    setError(null);
-    setConnectionStatus('connecting');
-    setIsAsrReady(false);
-
+  // 创建会话
+  const handlePhaseConfig = useCallback(async (config: any) => {
+    setError(null); setConnectionStatus('connecting'); setIsAsrReady(false);
     try {
-      const session = await voiceInterviewApi.createSession({
-        skillId: config.skillId,
-        difficulty: config.difficulty,
-        introEnabled: false,
-        techEnabled: config.techEnabled,
-        projectEnabled: config.projectEnabled,
-        hrEnabled: config.hrEnabled,
-        plannedDuration: config.plannedDuration,
-        resumeId: config.resumeId,
-        llmProvider: config.llmProvider,
-      });
-
+      const session = await voiceInterviewApi.createSession({ ...config, introEnabled: false });
       setSessionId(session.sessionId);
       setCurrentPhase(session.currentPhase);
-
       const wsUrl = session.webSocketUrl || `ws://localhost:8080/ws/voice-interview/${session.sessionId}`;
       connectWithHandlers(session.sessionId, wsUrl);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '创建面试会话失败，请重试';
-      setError(errorMessage);
-      setConnectionStatus('disconnected');
-      setIsAsrReady(false);
+      setError(errorMessage); setConnectionStatus('disconnected'); setIsAsrReady(false);
       alert('创建会话失败：' + errorMessage);
     }
   }, [connectWithHandlers]);
 
+  // 恢复会话
   const handleResumeSession = useCallback(async (id: number) => {
-    setError(null);
-    setConnectionStatus('connecting');
-    setIsAsrReady(false);
-
+    setError(null); setConnectionStatus('connecting'); setIsAsrReady(false);
     try {
-      const [session, history] = await Promise.all([
-        voiceInterviewApi.resumeSession(id),
-        voiceInterviewApi.getMessages(id),
-      ]);
+      const [session, history] = await Promise.all([voiceInterviewApi.resumeSession(id), voiceInterviewApi.getMessages(id)]);
       setSessionId(session.sessionId);
       setCurrentPhase(session.currentPhase);
-
-      if (session.startTime) {
-        const elapsedSec = Math.floor((Date.now() - new Date(session.startTime).getTime()) / 1000);
-        setCurrentTime(elapsedSec > 0 ? elapsedSec : 0);
-      }
-
+      if (session.startTime) setCurrentTime(Math.floor((Date.now() - new Date(session.startTime).getTime()) / 1000));
       const restored: { role: 'user' | 'ai'; text: string; id: string }[] = [];
       let pendingAi: { text: string; id: string } | null = null;
       for (const msg of history) {
         const aiText = msg.aiGeneratedText?.trim();
         const userText = msg.userRecognizedText?.trim();
-
         if (pendingAi) {
           restored.push({ role: 'ai', text: pendingAi.text, id: pendingAi.id });
           pendingAi = null;
-          if (userText) {
-            restored.push({ role: 'user', text: userText, id: `user-${msg.id}` });
-          }
-          if (aiText) {
-            pendingAi = { text: aiText, id: `ai-${msg.id}` };
-          }
+          if (userText) restored.push({ role: 'user', text: userText, id: `user-${msg.id}` });
+          if (aiText) pendingAi = { text: aiText, id: `ai-${msg.id}` };
           continue;
         }
-
-        if (aiText && userText) {
-          restored.push({ role: 'ai', text: aiText, id: `ai-${msg.id}` });
-          restored.push({ role: 'user', text: userText, id: `user-${msg.id}` });
-        } else if (aiText) {
-          pendingAi = { text: aiText, id: `ai-${msg.id}` };
-        } else if (userText) {
-          restored.push({ role: 'user', text: userText, id: `user-${msg.id}` });
-        }
+        if (aiText && userText) { restored.push({ role: 'ai', text: aiText, id: `ai-${msg.id}` }, { role: 'user', text: userText, id: `user-${msg.id}` }); }
+        else if (aiText) pendingAi = { text: aiText, id: `ai-${msg.id}` };
+        else if (userText) restored.push({ role: 'user', text: userText, id: `user-${msg.id}` });
       }
-      if (pendingAi) {
-        restored.push({ role: 'ai', text: pendingAi.text, id: pendingAi.id });
-      }
+      if (pendingAi) restored.push({ role: 'ai', text: pendingAi.text, id: pendingAi.id });
       setMessages(restored);
-
       const wsUrl = session.webSocketUrl || `ws://localhost:8080/ws/voice-interview/${session.sessionId}`;
       connectWithHandlers(session.sessionId, wsUrl);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '恢复会话失败');
-      setConnectionStatus('disconnected');
-      setIsAsrReady(false);
-    }
+    } catch (error) { setError(error instanceof Error ? error.message : '恢复会话失败'); setConnectionStatus('disconnected'); setIsAsrReady(false); }
   }, [connectWithHandlers]);
 
-  // Auto-start
+  // 自动开始
   useEffect(() => {
     if (autoStartRef.current) return;
-
     if (presetVoiceConfig) {
       autoStartRef.current = true;
-      handlePhaseConfig({
-        skillId: presetVoiceConfig.skillId,
-        difficulty: presetVoiceConfig.difficulty,
-        techEnabled: presetVoiceConfig.techEnabled,
-        projectEnabled: presetVoiceConfig.projectEnabled,
-        hrEnabled: presetVoiceConfig.hrEnabled,
-        plannedDuration: presetVoiceConfig.plannedDuration,
-        resumeId: presetVoiceConfig.resumeId,
-        llmProvider: presetVoiceConfig.llmProvider,
-      });
+      handlePhaseConfig(presetVoiceConfig);
     } else if (resumeSessionId) {
       autoStartRef.current = true;
       handleResumeSession(resumeSessionId);
     }
   }, [handlePhaseConfig, handleResumeSession, presetVoiceConfig, resumeSessionId]);
 
-  // 麦克风音频持续发送给服务端做 ASR
   const handleAudioData = (audioData: string) => {
-    if (isAiSpeakingRef.current || isSubmittingRef.current) {
-      return;
-    }
-    if (!isAsrReadyRef.current) {
-      return;
-    }
-    if (wsRef.current && wsRef.current.isConnected()) {
-      wsRef.current.sendAudio(audioData);
-    } else {
-      setError('未连接到服务器，请刷新页面重试');
-    }
+    if (isAiSpeakingRef.current || isSubmittingRef.current) return;
+    if (!isAsrReadyRef.current) return;
+    if (wsRef.current?.isConnected()) wsRef.current.sendAudio(audioData);
+    else setError('未连接到服务器，请刷新页面重试');
   };
-
-  const handleSpeechStart = () => {};
-  const handleSpeechEnd = () => {};
 
   const handleEndInterview = async () => {
     endedByUserRef.current = true;
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    if (wsRef.current) {
-      wsRef.current.disconnect();
-    }
-    if (sessionId) {
-      try {
-        await voiceInterviewApi.endSession(sessionId);
-      } catch (error) {
-        console.error('Failed to end session:', error);
-      }
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (wsRef.current) wsRef.current.disconnect();
+    if (sessionId) { try { await voiceInterviewApi.endSession(sessionId); } catch (e) { console.error(e); } }
     navigate('/interviews');
   };
 
-  const handleCloseModal = () => {
-    navigate('/history');
-  };
+  const handleCloseModal = () => navigate('/history');
 
   const canSubmit = !!userText.trim() && !isAiSpeaking && !isSubmitting && connectionStatus === 'connected';
   const canRecord = connectionStatus === 'connected' && isAsrReady && !isAiSpeaking && !isSubmitting;
-
   const skillName = SKILL_NAMES[effectiveSkillId] || templateName || effectiveSkillId;
 
   if (!autoStartRef.current && !presetVoiceConfig && !resumeSessionId) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
-          <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请通过「模拟面试」页面选择语音模式开始</p>
-          <button
-            onClick={handleCloseModal}
-            className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            返回重新开始
-          </button>
+        <div className="min-h-[60vh] flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
+            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+            <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请通过「模拟面试」页面选择语音模式开始</p>
+            <button onClick={handleCloseModal} className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">返回重新开始</button>
+          </div>
         </div>
-      </div>
     );
   }
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 5rem)' }}>
-      {/* Immersive top bar */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <motion.button
-              onClick={() => navigate('/interviews')}
-              className="p-2 -ml-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </motion.button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
-                <Mic className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h1 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">语音模拟面试</h1>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{skillName}</p>
+      <div className="flex flex-col" style={{ height: 'calc(100vh - 5rem)' }}>
+        {/* 顶部栏（保持不变） */}
+        <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <motion.button onClick={() => navigate('/interviews')} className="p-2 -ml-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><ArrowLeft className="w-5 h-5" /></motion.button>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center"><Mic className="w-4 h-4 text-white" /></div>
+                <div><h1 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">语音模拟面试</h1><p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{skillName}</p></div>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Phase badge */}
-            <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-xs font-medium text-primary-600 dark:text-primary-400">
-              {getPhaseLabel(currentPhase)}
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-xs font-medium text-primary-600 dark:text-primary-400">{getPhaseLabel(currentPhase)}</span>
+              <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${connectionStatus === 'connected' ? (isAsrReady ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400') : connectionStatus === 'connecting' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'connected' && isAsrReady ? 'bg-emerald-500' : connectionStatus === 'connected' ? 'bg-amber-500 animate-pulse' : connectionStatus === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`} />
+                {connectionStatus === 'connected' ? (isAsrReady ? '就绪' : '准备中') : connectionStatus === 'connecting' ? '连接中' : '断开'}
             </span>
-            {/* Connection status */}
-            <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
-              connectionStatus === 'connected'
-                ? isAsrReady
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                : connectionStatus === 'connecting'
-                  ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                  : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                connectionStatus === 'connected' && isAsrReady
-                  ? 'bg-emerald-500'
-                  : connectionStatus === 'connected'
-                    ? 'bg-amber-500 animate-pulse'
-                    : connectionStatus === 'connecting'
-                      ? 'bg-amber-500 animate-pulse'
-                      : 'bg-red-500'
-              }`} />
-              {connectionStatus === 'connected'
-                ? isAsrReady ? '就绪' : '准备中'
-                : connectionStatus === 'connecting' ? '连接中' : '断开'}
-            </span>
-            {/* Timer */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-mono font-bold text-slate-600 dark:text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              {formatTime(currentTime)}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-mono font-bold text-slate-600 dark:text-slate-300"><Clock className="w-3.5 h-3.5 text-slate-400" />{formatTime(currentTime)}</div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Error banner */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-2.5 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">{error}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        {/* 错误提示 */}
+        <AnimatePresence>
+          {error && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-2.5 flex items-center gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0" /><span className="text-sm">{error}</span></div>
+              </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Main content area — 3 cards */}
-      <div className="flex-1 min-h-0 p-4">
-        <div className="max-w-7xl mx-auto h-full grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {/* ===== Left 2/3: Avatar card + Answer card ===== */}
-          <div className="xl:col-span-2 h-full flex flex-col gap-4">
-            {/* --- Card 1: Interviewer Avatar --- */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex-1 flex flex-col items-center justify-center relative overflow-hidden">
-              {/* Sound wave rings — only when AI speaking */}
-              <AnimatePresence>
-                {isAiSpeaking && (
-                  <>
-                    {[0, 1, 2].map((i) => (
-                      <motion.div
-                        key={`wave-${i}`}
-                        className="absolute rounded-full border border-primary-400/30 dark:border-primary-500/20"
-                        initial={{ width: 128, height: 128, opacity: 0.5 }}
-                        animate={{
-                          width: [128, 128 + (i + 1) * 70],
-                          height: [128, 128 + (i + 1) * 70],
-                          opacity: [0.5, 0],
-                        }}
-                        transition={{
-                          duration: 1.8,
-                          repeat: Infinity,
-                          delay: i * 0.35,
-                          ease: 'easeOut',
-                        }}
-                        style={{
-                          marginLeft: -(64 + (i + 1) * 35),
-                          marginTop: -(64 + (i + 1) * 35),
-                          top: '50%',
-                          left: '50%',
-                        }}
-                      />
-                    ))}
-                    {/* Extra outer breathing ring */}
-                    <motion.div
-                      className="absolute rounded-full border-2 border-primary-300/20 dark:border-primary-400/10"
-                      initial={{ width: 140, height: 140, opacity: 0.3 }}
-                      animate={{
-                        width: [140, 260],
-                        height: [140, 260],
-                        opacity: [0.3, 0],
-                      }}
-                      transition={{
-                        duration: 2.5,
-                        repeat: Infinity,
-                        ease: 'easeOut',
-                      }}
-                      style={{
-                        marginLeft: -70,
-                        marginTop: -70,
-                        top: '50%',
-                        left: '50%',
-                      }}
-                    />
-                  </>
-                )}
-              </AnimatePresence>
-
-              {/* Avatar */}
-              <div className="relative w-[280px] h-[280px]">
-                {/* 说话时光效 */}
-                {isAiSpeaking && (
-                  <motion.div
-                    className="absolute inset-0 rounded-full"
-                    animate={{
-                      boxShadow: [
-                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
-                        '0 0 60px 20px rgba(16,185,129,0.4), 0 0 100px 40px rgba(16,185,129,0.2)',
-                        '0 0 40px 10px rgba(16,185,129,0.3), 0 0 80px 30px rgba(16,185,129,0.15)',
-                      ],
-                      scale: [1, 1.05, 1],
-                      transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-                    }}
-                  />
-                )}
-                <motion.div
-                  animate={isAiSpeaking ? {
-                    scale: [1, 1.03, 1],
-                    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-                  } : {}}
-                  className={`relative z-10 w-full h-full rounded-full flex items-center justify-center transition-all duration-500 overflow-hidden ${
-                    isAiSpeaking
-                      ? 'ring-4 ring-primary-300/60 shadow-2xl shadow-primary-400/30'
-                      : 'ring-2 ring-slate-200 dark:ring-slate-600 shadow-xl'
-                  }`}
-                >
-                  <img src={femaleAvatar} alt="面试官" className="w-full h-full rounded-full object-cover" />
-                </motion.div>
-              </div>
-
-              {/* Question text below avatar */}
-              <div className="relative z-10 w-full max-w-lg mt-5 min-h-[56px]">
-                <AnimatePresence mode="wait">
-                  {isAiSpeaking && aiText ? (
-                    <motion.p
-                      key="ai-q"
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="text-center text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed px-4"
-                    >
-                      {aiText}
-                      <motion.span
-                        className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1 rounded-full"
-                        animate={{ opacity: [1, 0.25, 1] }}
-                        transition={{ duration: 0.8, repeat: Infinity }}
-                      />
-                    </motion.p>
-                  ) : !isAiSpeaking && !isSubmitting && messages.length === 0 ? (
-                    <motion.p
-                      key="waiting"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center text-sm text-slate-400 dark:text-slate-500 px-4"
-                    >
-                      面试即将开始，请准备...
-                    </motion.p>
-                  ) : (
-                    <motion.p
-                      key="idle"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center text-sm text-slate-400 dark:text-slate-500 px-4"
-                    >
-                      {isSubmitting ? '正在思考...' : '等待下一题...'}
-                    </motion.p>
+        {/* 主要内容区 */}
+        <div className="flex-1 min-h-0 p-4">
+          <div className="max-w-7xl mx-auto h-full grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2 h-full flex flex-col gap-4">
+              {/* 面试官视频卡片 */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex-1 flex flex-col items-center justify-center relative overflow-visible">
+                <AnimatePresence>
+                  {isAiSpeaking && (
+                      <>
+                        {[0, 1, 2].map((i) => (
+                            <motion.div key={`wave-${i}`} className="absolute rounded-full border border-primary-400/30 dark:border-primary-500/20" initial={{ width: 128, height: 128, opacity: 0.5 }} animate={{ width: [128, 128 + (i + 1) * 70], height: [128, 128 + (i + 1) * 70], opacity: [0.5, 0] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.35, ease: 'easeOut' }} style={{ marginLeft: -(64 + (i + 1) * 35), marginTop: -(64 + (i + 1) * 35), top: '50%', left: '50%' }} />
+                        ))}
+                        <motion.div className="absolute rounded-full border-2 border-primary-300/20 dark:border-primary-400/10" initial={{ width: 140, height: 140, opacity: 0.3 }} animate={{ width: [140, 260], height: [140, 260], opacity: [0.3, 0] }} transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut' }} style={{ marginLeft: -70, marginTop: -70, top: '50%', left: '50%' }} />
+                      </>
                   )}
                 </AnimatePresence>
-              </div>
-            </div>
-
-            {/* --- Card 2: User Answer + Controls --- */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4">
-              {/* ASR recognized text display */}
-              <div className="mb-3 min-h-[44px] px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-                <AnimatePresence mode="wait">
-                  {userText ? (
-                    <motion.p
-                      key="asr-text"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed"
-                    >
-                      {userText}
-                      {isRecording && (
-                        <span className="inline-block w-2 h-4 bg-primary-500 ml-0.5 animate-pulse" />
-                      )}
-                    </motion.p>
-                  ) : (
-                    <p className="text-sm text-slate-400 dark:text-slate-500 italic">
-                      {isRecording ? '正在聆听...' : '点击麦克风开始说话'}
-                    </p>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* 3 buttons: End | Mic | Submit — equal width */}
-              <div className="flex items-center gap-3">
-                {/* End button (left) */}
-                <button
-                  onClick={handleEndInterview}
-                  disabled={connectionStatus !== 'connected'}
-                  className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  结束
-                </button>
-
-                {/* Mic button (center) */}
-                <div className="flex-1 flex items-center justify-center">
-                  <AudioRecorder
-                    isRecording={isRecording}
-                    disabled={!isRecording && !canRecord}
-                    onRecordingChange={setIsRecording}
-                    onAudioData={handleAudioData}
-                    onSpeechStart={handleSpeechStart}
-                    onSpeechEnd={handleSpeechEnd}
+                {/* 视频容器，设置 overflow-visible 防止裁剪 */}
+                <div className="relative w-[280px] h-[280px] md:w-[320px] md:h-[320px] lg:w-[400px] lg:h-[500px] overflow-visible">
+                  <VideoAvatar
+                      key={dynamicVideoSrc ? 'dynamic' : 'default'} // 强制切换时重新挂载
+                      defaultSrc={defaultBgVideo}
+                      dynamicSrc={dynamicVideoSrc}
+                      onDynamicEnd={() => {
+                        console.log('[onDynamicEnd] 视频播放结束，清理动态视频');
+                        // 先重置状态，再清理视频资源
+                        finishAiPlayback();
+                        setDynamicVideoSrc(prev => {
+                          if (prev && prev !== defaultBgVideo && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+                          return null;
+                        });
+                        // 额外确保 AudioRecorder 的 disabled 状态重新计算（强制触发重渲染）
+                        // 注意：finishAiPlayback 已经 setAiSpeaking(false) 和 setIsSubmitting(false)，会自动生效
+                      }}
+                      className="w-full h-full object-contain rounded-2xl shadow-xl relative z-10"
+                      defaultMuted={true}
+                      dynamicMuted={false}
                   />
                 </div>
+                {/* 字幕 */}
+                <div className="relative z-10 w-full max-w-lg mt-5 min-h-[56px]">
+                  <AnimatePresence mode="wait">
+                    {isAiSpeaking && aiText ? (
+                        <motion.p key="ai-q" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-center text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed px-4">
+                          {aiText}
+                          <motion.span className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1 rounded-full" animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 0.8, repeat: Infinity }} />
+                        </motion.p>
+                    ) : !isAiSpeaking && !isSubmitting && messages.length === 0 ? (
+                        <motion.p key="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">面试即将开始，请准备...</motion.p>
+                    ) : (
+                        <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">{isSubmitting ? '正在思考...' : '等待下一题...'}</motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
 
-                {/* Submit button (right) */}
-                <button
-                  onClick={handleSubmitAnswer}
-                  disabled={!canSubmit}
-                  className={`flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-                    canSubmit
-                      ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md shadow-primary-500/25 hover:shadow-lg'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                  }`}
-                >
-                  <SendHorizonal className="w-4 h-4" />
-                  提交回答
-                </button>
+              {/* 用户回答卡片 */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4">
+                <div className="mb-3 min-h-[44px] px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                  <AnimatePresence mode="wait">
+                    {userText ? (
+                        <motion.p key="asr-text" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                          {userText}
+                          {isRecording && <span className="inline-block w-2 h-4 bg-primary-500 ml-0.5 animate-pulse" />}
+                        </motion.p>
+                    ) : (
+                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">{isRecording ? '正在聆听...' : '点击麦克风开始说话'}</p>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleEndInterview} disabled={connectionStatus !== 'connected'} className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed"><PhoneOff className="w-4 h-4" />结束</button>
+                  <div className="flex-1 flex items-center justify-center">
+                    <AudioRecorder isRecording={isRecording} disabled={!isRecording && !canRecord} onRecordingChange={setIsRecording} onAudioData={handleAudioData} onSpeechStart={()=>{}} onSpeechEnd={()=>{}} />
+                  </div>
+                  <button onClick={handleSubmitAnswer} disabled={!canSubmit} className={`flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${canSubmit ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-md shadow-primary-500/25 hover:shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}><SendHorizonal className="w-4 h-4" />提交回答</button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* ===== Right 1/3: Conversation Log (list style) ===== */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col min-h-0">
-            <RealtimeSubtitle
-              messages={messages}
-              userText={userText}
-              aiText={aiText}
-              isAiSpeaking={isAiSpeaking}
-            />
+            {/* 右侧对话实录 */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col min-h-0">
+              <RealtimeSubtitle messages={messages} userText={userText} aiText={aiText} isAiSpeaking={isAiSpeaking} />
+            </div>
           </div>
         </div>
       </div>
-
-      {aiAudio && (
-        <audio
-          ref={audioPlayerRef}
-          src={`data:audio/wav;base64,${aiAudio}`}
-          onEnded={() => {
-            finishAiPlayback();
-          }}
-          onPlay={() => setAiSpeaking(true)}
-          autoPlay
-          style={{ display: 'none' }}
-        />
-      )}
-    </div>
   );
 }
