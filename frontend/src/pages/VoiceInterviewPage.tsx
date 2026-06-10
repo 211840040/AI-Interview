@@ -117,6 +117,10 @@ export default function VoiceInterviewPage() {
     }
   }, []);
 
+  // 在现有 ref/state 定义区域添加
+  const isFirstQuestionCompletedRef = useRef(false);
+  const [isFirstQuestionCompleted, setIsFirstQuestionCompleted] = useState(false);
+
   useEffect(() => { aiTextRef.current = aiText; }, [aiText]);
   useEffect(() => { isAsrReadyRef.current = isAsrReady; }, [isAsrReady]);
   useEffect(() => { isSubmittingRef.current = isSubmitting; }, [isSubmitting]);
@@ -137,7 +141,6 @@ export default function VoiceInterviewPage() {
       pendingAiCommitRef.current = null;
     }
     chunkedPcmBuffersRef.current = [];
-    setAiText('');
     setIsAsrReady(true);
     stopHeartbeat();
     console.log('[finishAiPlayback] 完成');
@@ -303,6 +306,7 @@ export default function VoiceInterviewPage() {
     const text = userText.trim();
     setMessages(prev => [...prev, { role: 'user', text, id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }]);
     setUserText('');
+    setAiText('');
     wsRef.current.sendControl('submit', { text });
   }, [userText, isSubmitting]);
 
@@ -484,7 +488,12 @@ export default function VoiceInterviewPage() {
   const handleCloseModal = () => navigate('/history');
 
   const canSubmit = !!userText.trim() && !isAiSpeaking && !isSubmitting && connectionStatus === 'connected';
-  const canRecord = connectionStatus === 'connected' && isAsrReady && !isAiSpeaking && !isSubmitting;
+  const canRecord =
+      connectionStatus === 'connected' &&
+      isAsrReady &&
+      !isAiSpeaking &&
+      !isSubmitting &&
+      isFirstQuestionCompleted; // 🔒 必须等首个视频播完
   const skillName = SKILL_NAMES[effectiveSkillId] || templateName || effectiveSkillId;
 
   if (!autoStartRef.current && !presetVoiceConfig && !resumeSessionId) {
@@ -562,6 +571,12 @@ export default function VoiceInterviewPage() {
                           if (prev && prev !== defaultBgVideo && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
                           return null;
                         });
+                        // ✅ 【核心逻辑】如果是首次提问视频播完，解锁麦克风
+                        if (!isFirstQuestionCompletedRef.current) {
+                          isFirstQuestionCompletedRef.current = true;
+                          setIsFirstQuestionCompleted(true);
+                          console.log('[onDynamicEnd] 首次提问完成，麦克风已解锁');
+                        }
                         // 额外确保 AudioRecorder 的 disabled 状态重新计算（强制触发重渲染）
                         // 注意：finishAiPlayback 已经 setAiSpeaking(false) 和 setIsSubmitting(false)，会自动生效
                       }}
@@ -590,16 +605,35 @@ export default function VoiceInterviewPage() {
                 </div>
                 {/* 字幕 */}
                 <div className="relative z-10 w-full max-w-lg mt-5 min-h-[56px]">
+                  {/* 字幕区域渲染逻辑优化 */}
                   <AnimatePresence mode="wait">
-                    {isAiSpeaking && aiText ? (
-                        <motion.p key="ai-q" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-center text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed px-4">
+                    {/* ✅ 优先级 1：只要有 AI 文本（无论是否正在说话），就显示字幕 */}
+                    {aiText ? (
+                        <motion.p
+                            key="ai-q"
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="text-center text-base font-medium text-slate-800 dark:text-slate-100 leading-relaxed px-4"
+                        >
                           {aiText}
-                          <motion.span className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1 rounded-full" animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 0.8, repeat: Infinity }} />
+                          {/* ✅ 仅在 AI 正在说话时显示呼吸点动画 */}
+                          {isAiSpeaking && (
+                              <motion.span
+                                  className="inline-block w-1.5 h-1.5 bg-primary-500 ml-1 rounded-full"
+                                  animate={{ opacity: [1, 0.25, 1] }}
+                                  transition={{ duration: 0.8, repeat: Infinity }}
+                              />
+                          )}
                         </motion.p>
                     ) : !isAiSpeaking && !isSubmitting && messages.length === 0 ? (
-                        <motion.p key="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">面试即将开始，请准备...</motion.p>
+                        <motion.p key="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">
+                          面试即将开始，请准备...
+                        </motion.p>
                     ) : (
-                        <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">{isSubmitting ? '正在思考...' : '等待下一题...'}</motion.p>
+                        <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-sm text-slate-400 dark:text-slate-500 px-4">
+                          {isSubmitting ? '正在思考...' : '等待下一题...'}
+                        </motion.p>
                     )}
                   </AnimatePresence>
                 </div>
