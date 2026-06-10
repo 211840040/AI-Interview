@@ -88,6 +88,8 @@ export default function VoiceInterviewPage() {
   const lastAiCommittedTextRef = useRef('');
   const aiTextRef = useRef('');        // 用于保存最新字幕，供视频结束回调使用
   const pendingAiCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 在现有 ref 区域添加
+  const pendingAiTextRef = useRef<string>('');   // 暂存 AI 最终文本
 
   // 视频相关
   const [dynamicVideoSrc, setDynamicVideoSrc] = useState<string | null>(null);
@@ -135,18 +137,9 @@ export default function VoiceInterviewPage() {
       pendingAiCommitRef.current = null;
     }
     chunkedPcmBuffersRef.current = [];
-    const finalText = aiTextRef.current.trim();
-    if (finalText && finalText !== lastAiCommittedTextRef.current) {
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === 'ai' && last.text.trim() === finalText) return prev;
-        return [...prev, { role: 'ai', text: finalText, id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }];
-      });
-      lastAiCommittedTextRef.current = finalText;
-    }
     setAiText('');
-    setIsAsrReady(true);   // 恢复 ASR 就绪
-    stopHeartbeat();       // 停止心跳
+    setIsAsrReady(true);
+    stopHeartbeat();
     console.log('[finishAiPlayback] 完成');
   }, [setAiSpeaking, setIsSubmitting, setIsAsrReady, stopHeartbeat]);
 
@@ -229,8 +222,8 @@ export default function VoiceInterviewPage() {
       });
       const normalized = responseText.trim();
       if (normalized) {
-        setAiText(normalized);
-        setAiSpeaking(true);
+        // 暂存，等待视频播放时再显示
+        pendingAiTextRef.current = normalized;
       }
     } catch (error: any) {
       if (error.name === 'AbortError') return;
@@ -341,8 +334,16 @@ export default function VoiceInterviewPage() {
         pendingAiCommitRef.current = setTimeout(() => finishAiPlayback(), 2500);
       }
     },
-    onTextResponse: (_text: string, _isFinal: boolean) => {
-      // 不使用文本响应，统一由音频响应驱动
+    onTextResponse: (text: string, isFinal: boolean) => {
+      console.log('[onTextResponse] 收到文本', text, isFinal);
+      const normalized = (text || '').trim();
+      if (!normalized) return;
+      if (isFinal) {
+        // 只在最终文本时暂存，等待视频播放
+        pendingAiTextRef.current = normalized;
+        aiTextRef.current = normalized;
+      }
+      // 不再实时显示字幕
     },
     onClose: (event: { code: number }) => {
       setConnectionStatus('disconnected');
@@ -354,18 +355,38 @@ export default function VoiceInterviewPage() {
       setConnectionStatus('disconnected');
       setIsAsrReady(false);
     },
-    onAudioChunk: (data: string, index: number, isLast: boolean) => handleAudioChunk(data, index, isLast),
+    onAudioChunk: (data: string, index: number, isLast: boolean) => {
+      console.log('[onAudioChunk] 收到分块音频', index, isLast);
+      // 累积 PCM 数据用于视频生成
+      handleAudioChunk(data, index, isLast);
+      // 注意：字幕应该在收到 text 消息时显示，而不是在音频分块时
+    },
     onControl: (action: string, message?: string) => {
       if (action === 'asr_ready') { setIsAsrReady(true); setError(null); return; }
       if (action === 'asr_reconnecting') { setIsAsrReady(false); if (message) setError(message); return; }
       if (action === 'audio_complete') {
+        console.log('[onControl] 收到 audio_complete，完成视频生成');
         (async () => {
           if (chunkedPcmBuffersRef.current.length === 0) return;
           try {
             const wavBase64 = await mergeChunksToWavBase64(chunkedPcmBuffersRef.current);
             if (wavBase64) {
               const currentText = aiTextRef.current;
-              await requestAndPlayVideo(wavBase64, currentText);
+              if (currentText) {
+                // 已经有字幕文本，直接生成视频
+                await requestAndPlayVideo(wavBase64, currentText);
+              } else {
+                // 没有字幕文本，说明 text 消息还没到，等待一下
+                console.log('[onControl] 等待字幕文本...');
+                setTimeout(async () => {
+                  const text = aiTextRef.current;
+                  if (text) {
+                    await requestAndPlayVideo(wavBase64, text);
+                  } else {
+                    console.warn('[onControl] 超时未收到字幕文本');
+                  }
+                }, 2000);
+              }
             }
           } catch (err) { console.error('[ChunkAudio] Generate video error', err); }
           finally { chunkedPcmBuffersRef.current = []; }
@@ -543,6 +564,24 @@ export default function VoiceInterviewPage() {
                         });
                         // 额外确保 AudioRecorder 的 disabled 状态重新计算（强制触发重渲染）
                         // 注意：finishAiPlayback 已经 setAiSpeaking(false) 和 setIsSubmitting(false)，会自动生效
+                      }}
+                      onPlayStart={() => {
+                        const text = pendingAiTextRef.current;
+                        if (text) {
+                          console.log('[onPlayStart] 视频开始播放，显示 AI 字幕并记录:', text);
+                          setAiText(text);
+                          setAiSpeaking(true);
+                          // 添加到右侧对话实录
+                          if (text !== lastAiCommittedTextRef.current) {
+                            setMessages(prev => {
+                              const last = prev[prev.length - 1];
+                              if (last?.role === 'ai' && last.text.trim() === text) return prev;
+                              return [...prev, { role: 'ai', text, id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }];
+                            });
+                            lastAiCommittedTextRef.current = text;
+                          }
+                          pendingAiTextRef.current = '';
+                        }
                       }}
                       className="w-full h-full object-contain rounded-2xl shadow-xl relative z-10"
                       defaultMuted={true}

@@ -1,9 +1,11 @@
+// VideoAvatar.tsx
 import React, { useEffect, useRef, useState } from 'react';
 
 interface VideoAvatarProps {
     defaultSrc: string;
     dynamicSrc?: string | null;
     onDynamicEnd?: () => void;
+    onPlayStart?: () => void;          // 新增：动态视频开始播放时回调
     className?: string;
     style?: React.CSSProperties;
     dynamicMuted?: boolean;
@@ -14,6 +16,7 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
                                                      defaultSrc,
                                                      dynamicSrc,
                                                      onDynamicEnd,
+                                                     onPlayStart,
                                                      className = '',
                                                      style,
                                                      dynamicMuted = false,
@@ -23,6 +26,7 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
     const [currentSrc, setCurrentSrc] = useState<string>(defaultSrc);
     const [isDynamicMode, setIsDynamicMode] = useState<boolean>(false);
     const dynamicSrcRef = useRef<string | null | undefined>(null);
+    const playStartTriggeredRef = useRef(false);   // 避免重复触发
     const [loadError, setLoadError] = useState<boolean>(false);
     const retryCountRef = useRef(0);
 
@@ -35,6 +39,7 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
             setCurrentSrc(dynamicSrc);
             setLoadError(false);
             retryCountRef.current = 0;
+            playStartTriggeredRef.current = false;   // 重置触发标志
             videoRef.current.muted = dynamicMuted;
             videoRef.current.load();
             videoRef.current.play().catch(e => console.warn('[VideoAvatar] play dynamic failed', e));
@@ -50,7 +55,6 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
         }
     }, [dynamicSrc, defaultSrc, isDynamicMode, onDynamicEnd, dynamicMuted, defaultMuted]);
 
-// VideoAvatar.tsx 中关键部分（参考）
     const handleEnded = () => {
         if (isDynamicMode) {
             setIsDynamicMode(false);
@@ -60,7 +64,14 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
                 videoRef.current.load();
                 videoRef.current.play().catch(e => console.warn('[VideoAvatar] replay default failed', e));
             }
-            onDynamicEnd?.();  // 必须调用
+            onDynamicEnd?.();
+        }
+    };
+
+    const handlePlay = () => {
+        if (isDynamicMode && !playStartTriggeredRef.current) {
+            playStartTriggeredRef.current = true;
+            onPlayStart?.();
         }
     };
 
@@ -68,7 +79,6 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
         const target = e.currentTarget;
         console.error('[VideoAvatar] Load error:', target.src, e);
         setLoadError(true);
-        // 自动重试最多3次
         if (retryCountRef.current < 3 && target.src === defaultSrc && !isDynamicMode) {
             retryCountRef.current++;
             console.log(`[VideoAvatar] Retry ${retryCountRef.current}/3 for default video`);
@@ -82,7 +92,6 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
     };
 
     if (loadError && !isDynamicMode && retryCountRef.current >= 3) {
-        // 降级显示纯色背景或提示
         return (
             <div className={`${className} bg-slate-200 dark:bg-slate-700 flex items-center justify-center`} style={style}>
                 <span className="text-slate-500 dark:text-slate-400 text-sm">视频加载失败</span>
@@ -102,6 +111,7 @@ const VideoAvatar: React.FC<VideoAvatarProps> = ({
             loop={!isDynamicMode}
             onEnded={handleEnded}
             onError={handleError}
+            onPlay={handlePlay}
         />
     );
 };
